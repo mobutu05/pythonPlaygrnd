@@ -1,7 +1,28 @@
 from keras import Input, Model
 from keras.layers import Reshape, Activation, BatchNormalization, Conv2D, Flatten, Dropout, Dense
 from keras.optimizers import Adam
+from collections import deque
+from progress import Bar
 
+
+class AverageMeter(object):
+    """Computes and stores the average and current value
+       Imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
+    """
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
 
 class DotDict(dict):
     def __getattr__(self, name):
@@ -13,7 +34,7 @@ args = DotDict({
     # 'numEps': 100,
     # 'tempThreshold': 15,
     # 'updateThreshold': 0.6,
-    # 'maxlenOfQueue': 200000,
+    'maxlenOfQueue': 200000,
     # 'numMCTSSims': 25,
     # 'arenaCompare': 40,
     # 'cpuct': 1,
@@ -86,6 +107,17 @@ class Coach:
 
     def learn(self):
         for i in range(1, args.numIters + 1):
+            # bookkeeping
+            print('------ITER ' + str(i) + '------')
+            if not self.skipFirstSelfPlay or i > 1:
+                iterationTrainExamples = deque([], maxlen=args.maxlenOfQueue)
+
+                eps_time = AverageMeter()
+                bar = progress.Bar('Self Play', max=self.args.numEps)
+
+                self.mcts = MCTS(self.game, self.nnet)  # reset search tree
+                iterationTrainExamples += self.executeEpisode()
+                pass
             pass
 
 
