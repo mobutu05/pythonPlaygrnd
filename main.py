@@ -204,7 +204,7 @@ class Game:
     def getNextState(self, board, player, action):
         # if player takes action on board, return next (board,player)
         # action must be a valid move
-        if action == self.n*self.n:
+        if action == self.n*self.n:#no move, passing
         	return (board, -player)
         b = Board(self.n)
         b.pieces = np.copy(board)
@@ -332,7 +332,7 @@ class Coach:
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
 
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+            if len(self.trainExamplesHistory) > args.numItersForTrainExamplesHistory:
                 print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
@@ -428,18 +428,20 @@ class MCTS:
         s = self.game.stringRepresentation(canonicalBoard)
 
         if s not in self.Es:
-            self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
+            end = self.game.getGameEnded(canonicalBoard, 1)
+            self.Es[s] = end
         if self.Es[s]!=0:
             # terminal node
             return -self.Es[s]
 
         if s not in self.Ps:
             # leaf node
-            self.Ps[s], v = self.nnet.predict(canonicalBoard)
+            policy, v = self.nnet.predict(canonicalBoard)
             valids = self.game.getValidMoves(canonicalBoard, 1)
-            self.Ps[s] = self.Ps[s]*valids      # masking invalid moves
-            self.Ps[s] /= np.sum(self.Ps[s])    # renormalize
-
+            policy = policy*valids      # masking invalid moves
+            sum = np.sum(policy)
+            policy /=  sum   # renormalize
+            self.Ps[s] = policy
             self.Vs[s] = valids
             self.Ns[s] = 0
             return -v
@@ -467,14 +469,21 @@ class MCTS:
         v = self.search(next_s)
 
         if (s,a) in self.Qsa:
-            self.Qsa[(s,a)] = (self.Nsa[(s,a)]*self.Qsa[(s,a)] + v)/(self.Nsa[(s,a)]+1)
-            self.Nsa[(s,a)] += 1
+            qsa = self.Qsa[(s,a)]
+            nsa = self.Nsa[(s,a)]
+            qsa = (nsa * qsa + v)/(self.Nsa[(s,a)]+1)
+
+            nsa += 1
+            self.Nsa[(s,a)] = nsa
+            self.Qsa[(s, a)] = qsa
 
         else:
             self.Qsa[(s,a)] = v
             self.Nsa[(s,a)] = 1
 
-        self.Ns[s] += 1
+        ns = self.Ns[s]
+        ns += 1
+        self.Ns[s] = ns
         return -v
 if __name__ == "__main__":
     g = Game()
