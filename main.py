@@ -180,7 +180,7 @@ class Game:
         b.pieces = np.copy(board)
 
         if b.is_win(player):
-        	return 1
+            return 1
         if b.is_win(-player):
             return -1
         if b.has_legal_moves():
@@ -195,17 +195,17 @@ class Game:
         b.pieces = np.copy(board)
         legalMoves =  b.get_legal_moves(player)
         if len(legalMoves)==0:
-        	valids[-1]=1
-        	return np.array(valids)
+            valids[-1]=1
+            return np.array(valids)
         for x, y in legalMoves:
-        	valids[self.n*x+y]=1
+            valids[self.n*x+y]=1
         return np.array(valids)
 
     def getNextState(self, board, player, action):
         # if player takes action on board, return next (board,player)
         # action must be a valid move
         if action == self.n*self.n:#no move, passing
-        	return (board, -player)
+            return (board, -player)
         b = Board(self.n)
         b.pieces = np.copy(board)
         move = (int(action/self.n), action%self.n)
@@ -266,10 +266,13 @@ class NeuralNet:
         board = board[np.newaxis, :, :]
 
         # run
-        pi, v = self.model.predict(board)
+        # pi, v = self.model.predict(board)
+        pi = [1.0]*self.action_size
+        v = 0
 
         #print('PREDICTION TIME TAKEN : {0:03f}'.format(time.time()-start))
-        return pi[0], v[0]
+        # return pi[0], v[0]
+        return pi, v
 
 class Coach:
     def __init__(self, game, nnet):
@@ -314,7 +317,7 @@ class Coach:
                 iterationTrainExamples = deque([], maxlen=args.maxlenOfQueue)
 
                 eps_time = AverageMeter()
-                bar = Bar('Self Play', max= args.numEps)
+                # bar = Bar('Self Play', max= args.numEps)
                 end = time.time()
 
                 for eps in range(args.numEps):
@@ -324,11 +327,11 @@ class Coach:
                     # bookkeeping + plot progress
                     eps_time.update(time.time() - end)
                     end = time.time()
-                    bar.suffix = '({eps}/{maxeps}) Eps Time: {et:.3f}s | Total: {total:} | ETA: {eta:}'.format(
-                        eps=eps + 1, maxeps=args.numEps, et=eps_time.avg,
-                        total=bar.elapsed_td, eta=bar.eta_td)
-                    bar.next()
-                bar.finish()
+                #     bar.suffix = '({eps}/{maxeps}) Eps Time: {et:.3f}s | Total: {total:} | ETA: {eta:}'.format(
+                #         eps=eps + 1, maxeps=args.numEps, et=eps_time.avg,
+                #         total=bar.elapsed_td, eta=bar.eta_td)
+                #     bar.next()
+                # bar.finish()
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
 
@@ -436,7 +439,7 @@ class MCTS:
 
         if s not in self.Ps:
             # leaf node
-            policy, v = self.nnet.predict(canonicalBoard)
+            policy, v_ = self.nnet.predict(canonicalBoard)
             valids = self.game.getValidMoves(canonicalBoard, 1)
             policy = policy*valids      # masking invalid moves
             sum = np.sum(policy)
@@ -444,7 +447,7 @@ class MCTS:
             self.Ps[s] = policy
             self.Vs[s] = valids
             self.Ns[s] = 0
-            return -v
+            return -v_
 
         valids = self.Vs[s]
         cur_best = -float('inf')
@@ -485,6 +488,8 @@ class MCTS:
         ns += 1
         self.Ns[s] = ns
         return -v
+
+
 if __name__ == "__main__":
     g = Game()
     nn = NeuralNet(g)
