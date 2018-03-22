@@ -122,7 +122,7 @@ mills = [
     ((1, 1), (3, 1), (5, 1)),
     ((2, 2), (3, 2), (4, 2)),
     ((0, 3), (1, 3), (2, 3)),
-    ((4, 3), (4, 3), (6, 3)),
+    ((4, 3), (5, 3), (6, 3)),
     ((2, 4), (3, 4), (4, 4)),
     ((1, 5), (3, 5), (5, 5)),
     ((0, 6), (3, 6), (6, 6))
@@ -178,6 +178,17 @@ def isInAMill(board, pos, player):
 
 
 def getLegalMoves(board, player):
+    # only if the last move results in a mill
+    # if the player has a mill, it must remove an opponent's piece, that is not a mill either
+    # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
+    # need to select an opponent piece
+    if board[3][3] > 200:
+        available_opponent_pieces = list(filter(lambda x: getPosition(board, x) == -player, validPositions))
+        result = list(filter(lambda p: isInAMill(board, p, -player) is False, available_opponent_pieces))
+        result = [4 * 24 + validPositions.index(x) for x in result]
+        board[3][3] = board[3][3] % 200
+        return result
+
     pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if getPosition(board, pos) == player else 0),
                                        validPositions, 0)
     result = []
@@ -192,7 +203,7 @@ def getLegalMoves(board, player):
         # select all transitions that have a player piece in the first position and an empty one in the second position
         result = list(filter(lambda x: getPosition(board, x[0]) == player and
                                        getPosition(board, x[1]) == 0, validActions))
-        result = [5 * 24 + validPositions.index(x) for x in result]
+        result = [5 * 24 + validActions.index(x) for x in result]
     else:
         # phase 3: when only 3 pieces left can move anywhere empty
 
@@ -205,14 +216,6 @@ def getLegalMoves(board, player):
         result += [2 * 24 + validPositions.index(x) for x in empty]
     pass
 
-    # if the player has a mill, it must remove an opponent's piece, that is not a mill either
-    mill_no = functools.reduce(lambda acc, mill: isMill(board, mill, player), mills, 0)
-
-    # need to select an opponent piece
-    if mill_no > 0:
-        available_opponent_pieces = list(filter(lambda x: getPosition(board, x) == -player, board))
-        result = list(filter(lambda p: isInAMill(board, p, -player) is False, available_opponent_pieces))
-        result += [4 * 24 + validPositions.index(x) for x in result]
 
     return result
 
@@ -221,6 +224,7 @@ def getNextState(canonicalBoard, player, a):
     # if player takes action on board, return next (board,player)
     # action must be a valid move
     board = np.copy(canonicalBoard)
+    pos = (3,3)
     # phase
     category = a // 24
     # phase 3
@@ -230,34 +234,42 @@ def getNextState(canonicalBoard, player, a):
     if category == 3:
         (x, y) = validPositions[a % 24]
         board[y][x] = player
-        return (board, -player)
+        pos = (x, y)
         pass
     # capture
-    if category == 4:
+    elif category == 4:
+        # make sure flag is used only once
+        board[3][3] = board[3][3] % 200
+        player_no = board[3][3] // 10
+        opponent_no = board[3][3] % 10
+        opponent_no -= 1 #decrease one piece
+        board[3][3] = player_no * 10 + opponent_no
+        # remove piece
+        (x, y) = validPositions[a % 24]
+        board[y][x] = 0
+        pos = (x, y)
         pass
     # move
-    if category > 4:
+    elif category > 4:
         pass
-    # if a[0] == (-1, -1):
-    #
-    # if action == self.n * self.n:
-    #     return (board, -player)
-    # b = Board(self.n)
-    # b.pieces = np.copy(board)
-    # move = (int(action / self.n), action % self.n)
-    # b.execute_move(move, player)
-    # return (b.pieces, -player)
-    pass
+    #if a mill, keep the player
+    if isInAMill(board, pos,player):
+        board[3][3] += 200 #flag that a capture can be made
+        return (board, player)
+    else:
+        return (board, -player)
 
 
-def getValidMoves(game, player):
+
+def getValidMoves(canonicalboard, player):
     # make it a 0 and 1 array for each legal move
-    moves = getLegalMoves(game, player)
+    board = np.copy(canonicalboard)
+    moves = getLegalMoves(board, player)
     # return list(map(lambda x: 1 if x in moves else 0, validActions))
     return [1 if x in moves else 0 for x in range(getActionSize())]
 
 
-def getGameEnded(board, player):
+def getGameEnded(canonicalboard, player):
     # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
     # player win if:
     #   - opponent has less than 3 pieces
@@ -267,8 +279,10 @@ def getGameEnded(board, player):
     #   - future:
     #       - 50 moves with no capture
     #       - position replay 3 times
-    player_pieces = board[3][3] // 10
-    opponent_pieces = board[3][3] % 10
+    board = np.copy(canonicalboard)
+    center = board[3][3] % 200
+    player_pieces = center // 10
+    opponent_pieces = center % 10
     player_valid = getLegalMoves(board, player)
     opponent_valid = getLegalMoves(board, -player)
     if player_valid == [] and opponent_valid == []:
@@ -289,7 +303,7 @@ def toString(board):
     return hh
 
 
-def display(board):
+def display(board, current_player):
     n = board.shape[0]
     print("   ", end="")
     for y in range(n):
@@ -302,10 +316,10 @@ def display(board):
     for y in range(n):
         print(y, "|", end="")  # print the row #
         for x in range(n):
-            piece = board[y][x]  # get the piece to print
-            if piece == -1:
+            piece = board[y][x] * current_player # get the piece to print
+            if piece == 1:
                 print("X ", end="")
-            elif piece == 1:
+            elif piece == -1:
                 print("O ", end="")
             else:
                 if (y,x) in validPositions:
@@ -469,13 +483,14 @@ def executeEpisode():
 
         print("step ")
         print(steps)
-        display(canonicalBoard)
+        display(canonicalBoard, crtPlayer)
         pi = getActionProb(canonicalBoard)
         # sym = getSymmetries(canonicalBoard, pi)
         # for b, p in sym:
         trainExamples.append([canonicalBoard, crtPlayer, pi])
 
         action = np.random.choice(len(pi), p=pi)
+        category = action // 24
         board, crtPlayer = getNextState(board, crtPlayer, action)
 
         r = getGameEnded(board, crtPlayer)
