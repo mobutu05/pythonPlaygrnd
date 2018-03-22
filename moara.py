@@ -58,23 +58,53 @@ validPositions = [(0, 0), (0, 3), (0, 6),
 validActions = [
     # move pieces on the table
     # horizontal
-    ((0, 0), (0, 3)), ((0, 3), (0, 6)),
-    ((1, 1), (1, 3)), ((1, 3), (1, 5)),
+    ((0, 0), (0, 3)), ((0, 3), (0, 0)),
+    ((0, 3), (0, 6)), ((0, 6), (0, 3)),
+
+    ((1, 1), (1, 3)), ((1, 3), (1, 1)),
+    ((1, 3), (1, 5)), ((1, 5), (1, 3)),
+
     ((2, 2), (2, 3)), ((2, 3), (2, 4)),
+    ((2, 3), (2, 2)), ((2, 4), (2, 3)),
+
     ((3, 0), (3, 1)), ((3, 1), (3, 2)),
+    ((3, 1), (3, 3)), ((3, 2), (3, 1)),
+
     ((3, 4), (3, 5)), ((3, 5), (3, 6)),
+    ((3, 5), (3, 4)), ((3, 6), (3, 5)),
+
     ((4, 2), (4, 3)), ((4, 3), (4, 4)),
+    ((4, 3), (4, 2)), ((4, 4), (4, 3)),
+
     ((5, 1), (5, 3)), ((5, 3), (5, 5)),
+    ((5, 3), (5, 1)), ((5, 5), (5, 3)),
+
     ((6, 0), (6, 3)), ((6, 3), (6, 6)),
+    ((6, 3), (6, 0)), ((6, 3), (6, 6)),
     # vertical
     ((0, 0), (3, 0)), ((3, 0), (6, 0)),
+    ((3, 0), (0, 0)), ((6, 0), (3, 0)),
+
     ((1, 1), (3, 1)), ((3, 1), (5, 1)),
+    ((3, 1), (1, 1)), ((5, 1), (3, 1)),
+
     ((2, 2), (3, 2)), ((3, 2), (4, 2)),
+    ((3, 2), (2, 2)), ((4, 2), (3, 2)),
+
     ((0, 3), (1, 3)), ((1, 3), (2, 3)),
+    ((1, 3), (0, 3)), ((2, 3), (1, 3)),
+
     ((4, 3), (5, 3)), ((5, 3), (6, 3)),
+    ((5, 3), (4, 3)), ((6, 3), (5, 3)),
+
     ((2, 4), (3, 4)), ((3, 4), (4, 4)),
+    ((3, 4), (2, 4)), ((4, 4), (3, 4)),
+
     ((1, 5), (3, 5)), ((3, 5), (5, 5)),
-    ((0, 6), (3, 6)), ((3, 6), (6, 6))
+    ((3, 5), (1, 5)), ((5, 5), (3, 5)),
+
+    ((0, 6), (3, 6)), ((3, 6), (6, 6)),
+    ((3, 6), (0, 6)), ((6, 6), (3, 6))
 ]
 
 mills = [
@@ -101,23 +131,43 @@ mills = [
 
 def getActionSize():
     # return number of actions
-    return  (24 +  #fly 1st piece
-            24 + #fly 2nd piece
-            24 + #fly 3rd piece
-            24 + #put piece
-            24 + #capture piece
-            32)   #move piece
-
+    return (24 +  # fly 1st piece
+            24 +  # fly 2nd piece
+            24 +  # fly 3rd piece
+            24 +  # put piece
+            24 +  # capture piece
+            len(validActions))  # move piece
 
 
 def getPosition(board, pos):
     (x, y) = pos
-    return board[x][y]
+    return board[y][x]
+
+
+def getSymmetries(board, pi):
+    # mirror, rotational
+    assert (len(pi) == getActionSize())  # 1 for pass
+    pi_board = np.reshape(pi[:-1], (n, n))
+    l = []
+
+    for i in range(1, 5):
+        for j in [True, False]:
+            newB = np.rot90(board, i)
+            newPi = np.rot90(pi_board, i)
+            if j:
+                newB = np.fliplr(newB)
+                newPi = np.fliplr(newPi)
+            l += [(newB, list(newPi.ravel()) + [pi[-1]])]
+    return l
 
 
 def isMill(board, mill, player):
-    count = functools.reduce(lambda acc, i: 1 if getPosition(board, mill[i]) == player else 0, range(3), 0)
-    return 1 if count == 3 else 0
+    count = functools.reduce(lambda acc, i: acc + (1 if getPosition(board, mill[i]) == player else 0), range(3), 0)
+
+    if count == 3:
+        return 1
+    else:
+        return 0
 
 
 # is the piece in a mill of a player?
@@ -140,23 +190,23 @@ def getLegalMoves(board, player):
     elif player_no > 3:
         # phase 2: need to move a piece in a valid position
         # select all transitions that have a player piece in the first position and an empty one in the second position
-        result = list(filter(lambda x: getPosition(board, x[0] == player) and
-                                       getPosition(board, x[1] == 0), validActions))
+        result = list(filter(lambda x: getPosition(board, x[0]) == player and
+                                       getPosition(board, x[1]) == 0, validActions))
         result = [5 * 24 + validPositions.index(x) for x in result]
     else:
-        #phase 3: when only 3 pieces left can move anywhere empty
+        # phase 3: when only 3 pieces left can move anywhere empty
 
         empty = list(filter(lambda x: getPosition(board, x) == 0, validPositions))
-        #first pieces
+        # first pieces
         result = [0 * 24 + validPositions.index(x) for x in empty]
-        #second piece
+        # second piece
         result += [1 * 24 + validPositions.index(x) for x in empty]
-        #third piece
+        # third piece
         result += [2 * 24 + validPositions.index(x) for x in empty]
     pass
 
     # if the player has a mill, it must remove an opponent's piece, that is not a mill either
-    mill_no = functools.reduce(lambda acc, mill: isMill(board, mill, player_no), mills, 0)
+    mill_no = functools.reduce(lambda acc, mill: isMill(board, mill, player), mills, 0)
 
     # need to select an opponent piece
     if mill_no > 0:
@@ -166,25 +216,26 @@ def getLegalMoves(board, player):
 
     return result
 
+
 def getNextState(canonicalBoard, player, a):
     # if player takes action on board, return next (board,player)
     # action must be a valid move
-
-    #phase
+    board = np.copy(canonicalBoard)
+    # phase
     category = a // 24
-    #phase 3
+    # phase 3
     if category >= 0 and category <= 2:
         pass
-    #phase 1
+    # phase 1
     if category == 3:
-        (x,y) = validPositions[a % 24]
-        canonicalBoard[x][y] = player
-        return (canonicalBoard, -player)
+        (x, y) = validPositions[a % 24]
+        board[y][x] = player
+        return (board, -player)
         pass
-    #capture
+    # capture
     if category == 4:
         pass
-    #move
+    # move
     if category > 4:
         pass
     # if a[0] == (-1, -1):
@@ -198,10 +249,11 @@ def getNextState(canonicalBoard, player, a):
     # return (b.pieces, -player)
     pass
 
+
 def getValidMoves(game, player):
     # make it a 0 and 1 array for each legal move
     moves = getLegalMoves(game, player)
-    #return list(map(lambda x: 1 if x in moves else 0, validActions))
+    # return list(map(lambda x: 1 if x in moves else 0, validActions))
     return [1 if x in moves else 0 for x in range(getActionSize())]
 
 
@@ -237,12 +289,50 @@ def toString(board):
     return hh
 
 
+def display(board):
+    n = board.shape[0]
+    print("   ", end="")
+    for y in range(n):
+        print(y, "", end="")
+    print("")
+    print("  ", end="")
+    for _ in range(n):
+        print("-", end="-")
+    print("--")
+    for y in range(n):
+        print(y, "|", end="")  # print the row #
+        for x in range(n):
+            piece = board[y][x]  # get the piece to print
+            if piece == -1:
+                print("X ", end="")
+            elif piece == 1:
+                print("O ", end="")
+            else:
+                if (y,x) in validPositions:
+                    if x == n:
+                        print(".", end="")
+                    else:
+                        print(". ", end="")
+                else:
+                    if x == n:
+                        print(" ", end="")
+                    else:
+                        print("  ", end="")
+        print("|")
+
+    print("  ", end="")
+    for _ in range(n):
+        print("-", end="-")
+    print("--")
+
+
 EndGames = {}  # stores game.getGameEnded ended for board s
 initialPolicies = {}  # stores initial policy (returned by neural net)
 ValidMoves = {}  # stores game.getValidMoves for board s
-Ns = {}        # stores #times board s was visited
-Qsa = {}       # stores Q values for s,a (as defined in the paper)
-Nsa = {}       # stores #times action a was taken from state s
+Ns = {}  # stores #times board s was visited
+Qsa = {}  # stores Q values for s,a (as defined in the paper)
+Nsa = {}  # stores #times action a was taken from state s
+
 
 def MCTSearch(canonicalBoard):
     s = toString(canonicalBoard)
@@ -273,7 +363,7 @@ def MCTSearch(canonicalBoard):
         ValidMoves[s] = valids
         Ns[s] = 0
         return -v
-    #if initial policy already evaluated
+    # if initial policy already evaluated
     valids = ValidMoves[s]
     cur_best = -float('inf')
     best_act = []
@@ -281,18 +371,17 @@ def MCTSearch(canonicalBoard):
     # pick the action with the highest upper confidence bound
     cpuct = 1
     EPS = 1e-8
-    for a in range(getActionSize()):
-        if valids[a]:
-            if (s, a) in Qsa:
-                u = Qsa[(s, a)] + cpuct * initialPolicies[s][a] * math.sqrt(Ns[s]) / (1 + Nsa[(s, a)])
-            else:
-                u = cpuct * initialPolicies[s][a] * math.sqrt(Ns[s] + EPS)  # Q = 0 ?
+    for a in filter(lambda a: valids[a] == 1, range(getActionSize())):
+        if (s, a) in Qsa:
+            u = Qsa[(s, a)] + cpuct * initialPolicies[s][a] * math.sqrt(Ns[s]) / (1 + Nsa[(s, a)])
+        else:
+            u = cpuct * initialPolicies[s][a] * math.sqrt(Ns[s] + EPS)  # Q = 0 ?
 
-            if u > cur_best:
-                cur_best = u
-                best_act = [a]
-            elif u == cur_best:
-                best_act.append(a)
+        if u > cur_best:
+            cur_best = u
+            best_act = [a]
+        elif u == cur_best:
+            best_act.append(a)
 
     a = np.random.choice(best_act)
     # a = best_act
@@ -311,6 +400,7 @@ def MCTSearch(canonicalBoard):
 
     Ns[s] += 1
     return -v
+
 
 def NNInit():
     global model
@@ -352,11 +442,23 @@ def predict(board):
 def getActionProb(canonicalBoard, temp=1):
     for i in range(10):  # no of montecarlo simulations
         MCTSearch(canonicalBoard)
-    pass
+    s = toString(canonicalBoard)
+    counts = [Nsa[(s, a)] if (s, a) in Nsa else 0 for a in range(getActionSize())]
+
+    if temp == 0:
+        bestA = np.argmax(counts)
+        probs = [0] * len(counts)
+        probs[bestA] = 1
+        return probs
+
+    counts = [x ** (1. / temp) for x in counts]
+    probs = [x / float(sum(counts)) for x in counts]
+    return probs
 
 
 # one episode of self-play
 def executeEpisode():
+    trainExamples = []
     board = getInitBoard()
     crtPlayer = 1
     steps = 0  # how many steps in this episode
@@ -364,9 +466,22 @@ def executeEpisode():
     while True:
         steps += 1
         canonicalBoard = getCanonicalForm(board, crtPlayer)
+
+        print("step ")
+        print(steps)
+        display(canonicalBoard)
         pi = getActionProb(canonicalBoard)
-        pass
-    pass
+        # sym = getSymmetries(canonicalBoard, pi)
+        # for b, p in sym:
+        trainExamples.append([canonicalBoard, crtPlayer, pi])
+
+        action = np.random.choice(len(pi), p=pi)
+        board, crtPlayer = getNextState(board, crtPlayer, action)
+
+        r = getGameEnded(board, crtPlayer)
+
+        if r != 0:
+            return [(x[0], x[2], r * ((-1) ** (x[1] != crtPlayer))) for x in trainExamples]
 
 
 def learn():
