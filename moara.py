@@ -40,8 +40,10 @@ def getCanonicalForm(board, player):
     b = player * board
     if player == -1:
         # switch digits - first one is crt player
-        n = - b[3][3]
-        b[3][3] = (n // 10) + (n % 10) * 10
+        # c = abs(b[3][3]) // 200
+        # r = abs(b[3][3]) % 200
+        # b[3][3] = (r // 10) + (r % 10) * 10 + 200 * c
+        b[3][3] = abs(b[3][3])
     return b
 
 
@@ -229,9 +231,16 @@ def getNextState(canonicalBoard, player, a):
     category = a // 24
     # phase 3
     if category >= 0 and category <= 2:
+        xxx = 0
+        pieces = list(filter(lambda x: getPosition(board, x) == player, validPositions))
+        (x, y) = pieces[category]  # from
+        board[y][x] = 0
+        (x, y) = validPositions[a % 24]  # to
+        board[y][x] = player
+        pos = (x, y)
         pass
     # phase 1
-    if category == 3:
+    elif category == 3:
         (x, y) = validPositions[a % 24]
         board[y][x] = player
         pos = (x, y)
@@ -251,14 +260,21 @@ def getNextState(canonicalBoard, player, a):
         pass
     # move
     elif category > 4:
+        a -= 5 * 24
+        move = validActions[a]
+        (x, y) = move[0] # from
+        board[y][x] = 0
+        (x, y) = move[1] # to
+        board[y][x] = player
+        pos = (x, y)
         pass
     #if a mill, keep the player
     if isInAMill(board, pos,player):
         board[3][3] += 200 #flag that a capture can be made
         return (board, player)
     else:
+        board[3][3] = (board[3][3] // 10) + (board[3][3] % 10) * 10
         return (board, -player)
-
 
 
 def getValidMoves(canonicalboard, player):
@@ -491,6 +507,7 @@ def executeEpisode():
 
         action = np.random.choice(len(pi), p=pi)
         category = action // 24
+        n = canonicalBoard[3][3]
         board, crtPlayer = getNextState(board, crtPlayer, action)
 
         r = getGameEnded(board, crtPlayer)
