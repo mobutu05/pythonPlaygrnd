@@ -1,19 +1,15 @@
-import os
-import numpy as np
 import functools
-import keras
-from keras import Input, Model
-from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout
-from keras.optimizers import Adam
 import math
-
+import os
 from collections import deque
 from random import shuffle
 
-
-import math
 import numpy as np
+from keras import Input, Model
+from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout
+from keras.optimizers import Adam
 
+EPS = 1e-8
 
 class Arena():
     """
@@ -137,8 +133,6 @@ class Arena():
 
 
 class Game():
-
-
     """
     This class specifies the base Game class. To define your own game, subclass
     this class and implement the functions below. This works when the game is
@@ -282,16 +276,16 @@ class Game():
         category = action // 24
         # phase 3
         if category >= 0 and category <= 2:
-            pieces = list(filter(lambda x: getPosition(board, x) == player, validPositions))
+            pieces = list(filter(lambda x: self.getPosition(board, x) == player, self.validPositions))
             (x, y) = pieces[category]  # from
             board[y][x] = 0
-            (x, y) = validPositions[a % 24]  # to
+            (x, y) = self.validPositions[action % 24]  # to
             board[y][x] = player
             pos = (x, y)
             pass
         # phase 1
         elif category == 3:
-            (x, y) = validPositions[a % 24]
+            (x, y) = self.validPositions[action % 24]
             board[y][x] = player
             pos = (x, y)
             pass
@@ -304,29 +298,33 @@ class Game():
             opponent_no -= 1  # decrease one piece
             board[3][3] = player_no * 10 + opponent_no
             # remove piece
-            (x, y) = validPositions[a % 24]
+            (x, y) = self.validPositions[action % 24]
             board[y][x] = 0
             pos = (x, y)
             pass
         # move
-        elif category > 4:
-            a -= 5 * 24
-            move = validActions[a]
+        else:  # category > 4:
+            action -= 5 * 24
+            move = self.validActions[action]
             (x, y) = move[0]  # from
+            if board[y][x] != player:
+                a = 99
             board[y][x] = 0
             (x, y) = move[1]  # to
+            if board[y][x] != 0:
+                a = 99
             board[y][x] = player
             pos = (x, y)
             pass
         # if a mill, keep the player
-        if isInAMill(board, pos, player):
+        if self.isInAMill(board, pos, player):
             board[3][3] += 200  # flag that a capture can be made
             return (board, player)
         else:
             board[3][3] = (board[3][3] // 10) + (board[3][3] % 10) * 10
             return (board, -player)
 
-    def getValidMoves(self, canonicalboard, player):
+    def getValidMoves(self, board, player):
         """
         Input:
             board: current board
@@ -338,12 +336,11 @@ class Game():
                         0 for invalid moves
         """
         # make it a 0 and 1 array for each legal move
-        board = np.copy(canonicalboard)
         moves = self.getLegalMoves(board, player)
         # return list(map(lambda x: 1 if x in moves else 0, validActions))
         return [1 if x in moves else 0 for x in range(self.getActionSize())]
 
-    def getGameEnded(self, canonicalboard, player):
+    def getGameEnded(self, board, player):
         """
         Input:
             board: current board
@@ -363,7 +360,6 @@ class Game():
         #   - future:
         #       - 50 moves with no capture
         #       - position replay 3 times
-        board = np.copy(canonicalboard)
         center = board[3][3] % 200
         player_pieces = center // 10
         opponent_pieces = center % 10
@@ -411,7 +407,7 @@ class Game():
                        form of the board and the corresponding pi vector. This
                        is used when training the neural network from examples.
         """
-        pass
+        return [(board, pi)]
 
     def stringRepresentation(self, board):
         """
@@ -429,12 +425,13 @@ class Game():
         hh = hh + str(board[3][3] % 10)
         return hh
 
-    def getPosition(self,board, pos):
+    def getPosition(self, board, pos):
         (x, y) = pos
         return board[y][x]
 
-    def isMill(self,board, mill, player):
-        count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0), range(3), 0)
+    def isMill(self, board, mill, player):
+        count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0),
+                                 range(3), 0)
 
         if count == 3:
             return 1
@@ -444,20 +441,24 @@ class Game():
     # is the piece in a mill of a player?
     def isInAMill(self, board, pos, player):
         # find all mills that contain the pos
-        mill_list = list(filter(lambda mill: list(filter(lambda p: p == pos, mill)) != [], mills))
+        mill_list = list(filter(lambda mill: list(filter(lambda p: p == pos, mill)) != [], self.mills))
         return list(filter(lambda x: self.isMill(board, x, player) == 1, mill_list)) != []
 
-    def getLegalMoves(self,board, player):
+    def getLegalMoves(self, board, player):
         # only if the last move results in a mill
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if board[3][3] > 200:
-            available_opponent_pieces = list(filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
+        if board[3][3] > 200 and player == 1:
+            available_opponent_pieces = list(
+                filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
             result = [4 * 24 + self.validPositions.index(x) for x in result]
-            board[3][3] = board[3][3] % 200
-            return result
+            # board[3][3] = board[3][3] % 200
+            if len(result) > 0:
+                return result  # else choose another move
+            else:
+                print("can't capture")
 
         pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
                                            self.validPositions, 0)
@@ -484,8 +485,6 @@ class Game():
             result += [1 * 24 + self.validPositions.index(x) for x in empty]
             # third piece
             result += [2 * 24 + self.validPositions.index(x) for x in empty]
-        pass
-
         return result
 
     def display(self, board, current_player):
@@ -524,6 +523,7 @@ class Game():
             print("-", end="-")
         print("--")
 
+
 class MCTS():
     """
     This class handles the MCTS tree.
@@ -552,7 +552,7 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
-            self.search(canonicalBoard)
+            v = self.search(canonicalBoard)
             self.deep -= 1
 
         s = self.game.stringRepresentation(canonicalBoard)
@@ -587,6 +587,7 @@ class MCTS():
         Returns:
             v: the negative of the value of the current canonicalBoard
         """
+        # print (self.deep)
         self.deep += 1
         if self.deep > 100:
             stop = 1
@@ -607,40 +608,55 @@ class MCTS():
 
             self.Vs[s] = validMoves
             self.Ns[s] = 0
-            return -v
+            # print(s)
+            return -v[0]
 
         valids = self.Vs[s]
         cur_best = -float('inf')
         best_act = -1
+        # best_act = []
+        # # pick the action with the highest upper confidence bound
+        # for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
+        #     if (s, a) in self.Qsa:
+        #         u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
+        #             1 + self.Nsa[(s, a)])
+        #     else:
+        #         u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+        #
+        #     if u > cur_best:
+        #         cur_best = u
+        #         best_act = [a]
+        #     elif u == cur_best:
+        #         best_act.append(a)
+        # a = np.random.choice(best_act)
 
-        # pick the action with the highest upper confidence bound
-        for a in range(self.game.getActionSize()):
-            if valids[a]:
-                if (s, a) in self.Qsa:
-                    u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-                        1 + self.Nsa[(s, a)])
-                else:
-                    u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s])  # Q = 0 ?
+        valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
+        u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])) if (s, a) in self.Qsa
+               else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
 
-                if u > cur_best:
-                    cur_best = u
-                    best_act = a
+        best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc , zip(valid_actions, u_values), (best_act, cur_best))
+        a = best_pair[0]
 
-        a = best_act
-        next_s, next_player = self.game.getNextState(canonicalBoard, 1, a)
-        next_s = self.game.getCanonicalForm(next_s, next_player)
+        next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
+        next_s = self.game.getCanonicalForm(next_board, next_player)
+        if self.deep > 1000:
+            self.game.display(next_s, 1)
 
-        v = self.search(next_s)
-        deep -= 1
         if (s, a) in self.Qsa:
-            self.Qsa[(s, a)] = (self.Nsa[(s, a)] * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
+        else:
+            self.Nsa[(s, a)] = 1
+        self.Ns[s] += 1
+        v = self.search(next_s)
+        self.deep -= 1
+        if (s, a) in self.Qsa:
+            self.Qsa[(s, a)] = ((self.Nsa[(s, a)] - 1) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 0)
+            # self.Nsa[(s, a)] += 1
 
         else:
             self.Qsa[(s, a)] = v
-            self.Nsa[(s, a)] = 1
+            # self.Nsa[(s, a)] = 1
 
-        self.Ns[s] += 1
         return -v
 
 
@@ -736,15 +752,7 @@ class NeuralNet():
         if os.path.exists(filepath):
             self.model.load_weights(filepath)
         else:
-            print ("No model in path '{}'".format(filepath))
-
-
-
-
-
-
-
-
+            print("No model in path '{}'".format(filepath))
 
 
 #
@@ -860,7 +868,6 @@ class Coach():
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
-
     def executeEpisode(self):
         # trainExamples = []
         # board = getInitBoard()
@@ -896,20 +903,24 @@ class Coach():
             episodeStep += 1
             canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
-            self.game.display(canonicalBoard,self.curPlayer)
+
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
                 trainExamples.append([b, self.curPlayer, p, None])
 
             action = np.random.choice(len(pi), p=pi)
-            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
 
+            s = self.game.stringRepresentation(canonicalBoard)
+
+            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
+            self.game.display(board, 1)
+            if (s, action) in self.mcts.Qsa:
+                print(str(self.mcts.Qsa[(s, action)]) + " - " + str(episodeStep))
             r = self.game.getGameEnded(board, self.curPlayer)
 
             if r != 0:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
-
 
     def learn(self):
         # # how many iterations
@@ -929,14 +940,15 @@ class Coach():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for eps in range(self.args.numEps):
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    # self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.executeEpisode()
 
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
 
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory), " => remove the oldest trainExamples")
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)
@@ -970,18 +982,20 @@ class Coach():
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
 
+
 class dotdict(dict):
     def __getattr__(self, name):
         return self[name]
 
+
 if __name__ == "__main__":
     args = dotdict({
-        'numIters': 1000,
-        'numEps': 100,
+        'numIters': 100,
+        'numEps': 30,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 25,
+        'numMCTSSims': 15,
         'arenaCompare': 40,
         'cpuct': 1,
         'checkpoint': './temp/',
@@ -1000,6 +1014,6 @@ if __name__ == "__main__":
     g = Game()
     n = NeuralNet(g, args)
     n.load_checkpoint(".", "best.neuralnet.data")
-    c = Coach(g,n, args)
+    c = Coach(g, n, args)
     c.learn()
     print("moara")
