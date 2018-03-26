@@ -234,9 +234,17 @@ class Game():
             startBoard: a representation of the board (ideally this is the form
                         that will be the input to your neural network)
         """
-        arr = np.array([[0 for y in range(7)] for x in range(7)])
-        arr[3][3] = 99  # player/opponent
-        return arr
+        #first plane - pieces
+        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+        #second plane - number of pieces for player 1
+        arr2 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr2[3][3] = 9  # player/opponent
+        #third plane - number of pieces for player 2
+        arr3 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr3[3][3] = 8  # player/opponent
+        #fourth plane - flag is current player must capture
+        arr4 = np.array([[0 for y in range(7)] for x in range(7)])
+        return np.array([arr1, arr2, arr3, arr4])
 
     def getBoardSize(self):
         """
@@ -286,7 +294,7 @@ class Game():
         # phase 1
         elif category == 3:
             (x, y) = self.validPositions[action % 24]
-            board[y][x] = player
+            board[0][y][x] = player
             pos = (x, y)
             pass
         # capture
@@ -321,7 +329,7 @@ class Game():
             board[3][3] += 200  # flag that a capture can be made
             return (board, player)
         else:
-            board[3][3] = (board[3][3] // 10) + (board[3][3] % 10) * 10
+            # board[3][3] = (board[3][3] // 10) + (board[3][3] % 10) * 10
             return (board, -player)
 
     def getValidMoves(self, board, player):
@@ -360,9 +368,8 @@ class Game():
         #   - future:
         #       - 50 moves with no capture
         #       - position replay 3 times
-        center = board[3][3] % 200
-        player_pieces = center // 10
-        opponent_pieces = center % 10
+        player_pieces = board[1][3][3]
+        opponent_pieces = board[2][3][3]
         player_valid = self.getLegalMoves(board, player)
         opponent_valid = self.getLegalMoves(board, -player)
         if player_valid == [] and opponent_valid == []:
@@ -387,14 +394,18 @@ class Game():
                             board as is. When the player is black, we can invert
                             the colors and return the board.
         """
-        b = player * board
-        if player == -1:
-            # switch digits - first one is crt player
-            # c = abs(b[3][3]) // 200
-            # r = abs(b[3][3]) % 200
-            # b[3][3] = (r // 10) + (r % 10) * 10 + 200 * c
-            b[3][3] = abs(b[3][3])
-        return b
+        # b = player * board
+        # if player == -1:
+        #     # switch digits - first one is crt player
+        #     # c = abs(b[3][3]) // 200
+        #     # r = abs(b[3][3]) % 200
+        #     # b[3][3] = (r // 10) + (r % 10) * 10 + 200 * c
+        #     b[3][3] = abs(b[3][3])
+
+        if player == 1:
+            return board
+        else:
+            return np.array([board[0] * player, board[2], board[1], board[3]])
 
     def getSymmetries(self, board, pi):
         """
@@ -420,14 +431,18 @@ class Game():
         """
         hh = ''
         for (x, y) in self.validPositions:
-            hh = hh + str(board[y][x])
-        hh = hh + str(board[3][3] // 10)
-        hh = hh + str(board[3][3] % 10)
+            hh += str(board[0][y][x])
+        hh = hh + "-"
+        hh = hh + str(board[1][3][3]) #player
+        hh = hh + "-"
+        hh = hh + str(board[2][3][3]) #opponent
+        hh = hh + "-"
+        hh = hh + str(board[3][3][3])  #capture
         return hh
 
     def getPosition(self, board, pos):
         (x, y) = pos
-        return board[y][x]
+        return board[0][y][x]
 
     def isMill(self, board, mill, player):
         count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0),
@@ -449,12 +464,12 @@ class Game():
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if board[3][3] > 200 and player == 1:
+        if board[3][3][3] == 1:
             available_opponent_pieces = list(
                 filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
             result = [4 * 24 + self.validPositions.index(x) for x in result]
-            # board[3][3] = board[3][3] % 200
+            board[3][3][3] = 0 #capture once
             if len(result) > 0:
                 return result  # else choose another move
             else:
@@ -464,7 +479,7 @@ class Game():
                                            self.validPositions, 0)
         result = []
 
-        player_no = board[3][3] // 10
+        player_no = board[1][3][3] if player == 1 else board[2][3][3]
         if player_no > pieces_on_board:
             # phase 1: can put anywhere where there is an empty place
             result = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
@@ -671,10 +686,7 @@ class MCTS():
             self.Qsa[(s, a)] = v
             self.Nsa[(s, a)] = 1
         self.Ns[s] += 1
-        if (canonicalBoard[3][3] // 200 > 0):
-            return v
-        else:
-            return -v
+        return v * next_player
 
 
 class NeuralNet():
@@ -694,9 +706,9 @@ class NeuralNet():
         self.board_y = 7
 
         # Neural Net
-        self.input_boards = Input(shape=(self.board_x, self.board_y))  # s: batch_size x board_x x board_y
+        self.input_boards = Input(shape=(4,self.board_x, self.board_y))  # s: batch_size x board_x x board_y
 
-        x_image = Reshape((self.board_x, self.board_y, 1))(self.input_boards)  # batch_size  x board_x x board_y x 1
+        x_image = Reshape((self.board_x, self.board_y, 4))(self.input_boards)  # batch_size  x board_x x board_y x 4
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
             Conv2D(args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
         h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
@@ -744,6 +756,7 @@ class NeuralNet():
                 game.getActionSize
             v: a float in [-1,1] that gives the value of the current board
         """
+
         board = board[np.newaxis, :, :]
         pi, v = self.model.predict(board)
         return pi[0], v[0]
