@@ -366,12 +366,12 @@ class Game():
         player_valid = self.getLegalMoves(board, player)
         opponent_valid = self.getLegalMoves(board, -player)
         if player_valid == [] and opponent_valid == []:
-            return 0.5  # draw
+            return 0  # draw
         if opponent_pieces < 3 or opponent_valid == []:
             return 1
         if player_pieces < 3 or player_valid == []:
             return -1
-        return 0
+        return 777
 
     def getCanonicalForm(self, board, player):
         """
@@ -553,7 +553,7 @@ class MCTS():
         """
         for i in range(self.args.numMCTSSims):
             v = self.search(canonicalBoard)
-            self.deep -= 1
+            self.deep = 0
 
         s = self.game.stringRepresentation(canonicalBoard)
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
@@ -595,17 +595,28 @@ class MCTS():
 
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
-        if self.Es[s] != 0:
+        if self.Es[s] != 777:
             # terminal node
             return -self.Es[s]
 
         if s not in self.Ps:
             # leaf node
-            self.Ps[s], v = self.nnet.predict(canonicalBoard)
-            validMoves = self.game.getValidMoves(canonicalBoard, 1)
-            self.Ps[s] = self.Ps[s] * validMoves  # masking invalid moves
-            self.Ps[s] /= np.sum(self.Ps[s])  # renormalize
 
+            ps, v = self.nnet.predict(canonicalBoard)
+            validMoves = self.game.getValidMoves(canonicalBoard, 1)
+            ps = ps * validMoves  # masking invalid moves
+            sum_Ps_s = np.sum(ps)
+            if sum_Ps_s > 0:
+                ps /= sum_Ps_s  # renormalize
+            else:
+                # if all valid moves were masked make all valid moves equally probable
+
+                # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
+                # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.
+                print("All valid moves were masked, do workaround.")
+                ps = ps + validMoves
+                ps /= np.sum(ps)
+            self.Ps[s] = ps
             self.Vs[s] = validMoves
             self.Ns[s] = 0
             # print(s)
@@ -639,25 +650,31 @@ class MCTS():
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = self.game.getCanonicalForm(next_board, next_player)
-        if self.deep > 1000:
-            self.game.display(next_s, 1)
+        # if self.deep > 100:
+        #     self.game.display(next_s, 1)
 
-        if (s, a) in self.Qsa:
-            self.Nsa[(s, a)] += 1
+        # if (s, a) in self.Qsa:
+        #     self.Nsa[(s, a)] += 1
+        # else:
+        #     self.Nsa[(s, a)] = 1
+        # self.Ns[s] += 1
+        if self.deep > 200:
+            v =  0 #draw if too much is spent playing
         else:
-            self.Nsa[(s, a)] = 1
-        self.Ns[s] += 1
-        v = self.search(next_s)
+            v = self.search(next_s)
         self.deep -= 1
         if (s, a) in self.Qsa:
-            self.Qsa[(s, a)] = ((self.Nsa[(s, a)] - 1) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 0)
-            # self.Nsa[(s, a)] += 1
+            self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
+            self.Nsa[(s, a)] += 1
 
         else:
             self.Qsa[(s, a)] = v
-            # self.Nsa[(s, a)] = 1
-
-        return -v
+            self.Nsa[(s, a)] = 1
+        self.Ns[s] += 1
+        if (canonicalBoard[3][3] // 200 > 0):
+            return v
+        else:
+            return -v
 
 
 class NeuralNet():
@@ -715,7 +732,7 @@ class NeuralNet():
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
-        self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=batch_size, epochs=epochs)
+        self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size, epochs=self.args.epochs)
 
     def predict(self, board):
         """
@@ -903,7 +920,7 @@ class Coach():
             episodeStep += 1
             canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
-
+            #temp = 1
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
@@ -912,14 +929,13 @@ class Coach():
             action = np.random.choice(len(pi), p=pi)
 
             s = self.game.stringRepresentation(canonicalBoard)
-
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
             self.game.display(board, 1)
             if (s, action) in self.mcts.Qsa:
-                print(str(self.mcts.Qsa[(s, action)]) + " - " + str(episodeStep))
+                print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(board))
             r = self.game.getGameEnded(board, self.curPlayer)
 
-            if r != 0:
+            if r != 777:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
     def learn(self):
@@ -940,7 +956,7 @@ class Coach():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for eps in range(self.args.numEps):
-                    # self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.executeEpisode()
 
                 # save the iteration examples to the history
@@ -962,26 +978,52 @@ class Coach():
 
             # training new network, keeping a copy of the old one
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
-            pmcts = MCTS(self.game, self.pnet, self.args)
+            # self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+            # pmcts = MCTS(self.game, self.pnet, self.args)
 
             self.nnet.train(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
+            # nmcts = MCTS(self.game, self.nnet, self.args)
 
-            print('PITTING AGAINST PREVIOUS VERSION')
-            arena = Arena(lambda x: np.argmax(pmcts.getActionProb(x, temp=0)),
-                          lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game)
-            pwins, nwins, draws = arena.playGames(self.args.arenaCompare)
+            # print('PITTING AGAINST PREVIOUS VERSION')
+            # arena = Arena(lambda x: np.argmax(pmcts.getActionProb(x, temp=0)),
+            #               lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game)
+            # pwins, nwins, draws = arena.playGames(self.args.arenaCompare)
+            #
+            # print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
+            # if pwins + nwins > 0 and float(nwins) / (pwins + nwins) < self.args.updateThreshold:
+            #     print('REJECTING NEW MODEL')
+            #     self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
+            # else:
+            #     print('ACCEPTING NEW MODEL')
+            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
 
-            print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
-            if pwins + nwins > 0 and float(nwins) / (pwins + nwins) < self.args.updateThreshold:
-                print('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            else:
-                print('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+    def saveTrainExamples(self, iteration):
+        # folder = self.args.checkpoint
+        # if not os.path.exists(folder):
+        #     os.makedirs(folder)
+        # filename = os.path.join(folder, self.getCheckpointFile(iteration)+".examples")
+        # with open(filename, "wb+") as f:
+        #     Pickler(f).dump(self.trainExamplesHistory)
+        # f.closed
+        pass
 
+    def loadTrainExamples(self):
+        # modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
+        # examplesFile = modelFile+".examples"
+        # if not os.path.isfile(examplesFile):
+        #     print(examplesFile)
+        #     r = input("File with trainExamples not found. Continue? [y|n]")
+        #     if r != "y":
+        #         sys.exit()
+        # else:
+        #     print("File with trainExamples found. Read it.")
+        #     with open(examplesFile, "rb") as f:
+        #         self.trainExamplesHistory = Unpickler(f).load()
+        #     f.closed
+        #     # examples based on the model were already collected (loaded)
+        #     self.skipFirstSelfPlay = True
+        pass
 
 class dotdict(dict):
     def __getattr__(self, name):
@@ -991,7 +1033,7 @@ class dotdict(dict):
 if __name__ == "__main__":
     args = dotdict({
         'numIters': 100,
-        'numEps': 30,
+        'numEps': 1,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
@@ -1001,7 +1043,7 @@ if __name__ == "__main__":
         'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 20,
+        'numItersForTrainExamplesHistory': 200,
 
         'lr': 0.001,
         'dropout': 0.3,
