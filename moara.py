@@ -236,14 +236,23 @@ class Game():
         """
         #first plane - pieces
         arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr1[0][0] = 1
+        arr1[3][0] = 1
+        arr1[6][0] = 1
+        arr1[4][4] = 1
+        arr1[2][2] = -1
+        arr1[1][1] = -1
+        arr1[3][1] = -1
+        arr1[5][1] = -1
         #second plane - number of pieces for player 1
         arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr2[3][3] = 9  # player/opponent
+        arr2[3][3] = 4  # player/opponent
         #third plane - number of pieces for player 2
         arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr3[3][3] = 8  # player/opponent
+        arr3[3][3] = 4  # player/opponent
         #fourth plane - flag is current player must capture
         arr4 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr4[3][3] = 0
         return np.array([arr1, arr2, arr3, arr4])
 
     def getBoardSize(self):
@@ -258,12 +267,13 @@ class Game():
         Returns:
             actionSize: number of all possible actions
         """
-        return (24 +  # fly 1st piece
-                24 +  # fly 2nd piece
-                24 +  # fly 3rd piece
-                24 +  # put piece
-                24 +  # capture piece
-                len(self.validActions))  # move piece
+        # return (24 +  # fly 1st piece
+        #         24 +  # fly 2nd piece
+        #         24 +  # fly 3rd piece
+        #         24 +  # put piece
+        #         24 +  # capture piece
+        #         len(self.validActions))  # move piece
+        return 24
 
     def getNextState(self, canonicalBoard, player, action):
         """
@@ -281,55 +291,90 @@ class Game():
         board = np.copy(canonicalBoard)
         pos = (3, 3)
         # phase
-        category = action // 24
-        # phase 3
-        if category >= 0 and category <= 2:
-            pieces = list(filter(lambda x: self.getPosition(board, x) == player, self.validPositions))
-            (x, y) = pieces[category]  # from
-            board[y][x] = 0
-            (x, y) = self.validPositions[action % 24]  # to
-            board[y][x] = player
-            pos = (x, y)
-            pass
-        # phase 1
-        elif category == 3:
-            (x, y) = self.validPositions[action % 24]
-            board[0][y][x] = player
-            pos = (x, y)
-            pass
-        # capture
-        elif category == 4:
+        # category = action // 24
+
+        #phase 1
+        if self.getBoardStatus(board) == 0:
+            pieces_on_board = len([0 for pos in self.validPositions if self.getPosition(board, pos) == player])
+            player_no = self.getPlayerCount(board) if player == 1 else self.getOpponentCount(board)
+            if player_no > pieces_on_board:#put
+                pos = self.validPositions[action]
+                self.setPosition(board, pos, player)
+            else:#prepare move
+                self.setBoardStatus(board,action + 1)
+
+        elif self.getBoardStatus(board) == -1:
             # make sure flag is used only once
-            board[3][3] = board[3][3] % 200
-            player_no = board[3][3] // 10
-            opponent_no = board[3][3] % 10
-            opponent_no -= 1  # decrease one piece
-            board[3][3] = player_no * 10 + opponent_no
+            self.setBoardStatus(board, 0)
             # remove piece
-            (x, y) = self.validPositions[action % 24]
-            board[y][x] = 0
-            pos = (x, y)
+            pos = self.validPositions[action]
+            self.setPosition(board, pos, 0)
+            self.setOpponentCount(board, self.getOpponentCount(board) - 1)
             pass
-        # move
-        else:  # category > 4:
-            action -= 5 * 24
-            move = self.validActions[action]
-            (x, y) = move[0]  # from
-            if board[y][x] != player:
-                a = 99
-            board[y][x] = 0
-            (x, y) = move[1]  # to
-            if board[y][x] != 0:
-                a = 99
-            board[y][x] = player
-            pos = (x, y)
+        elif self.getBoardStatus(board) > 0:
+            orig = self.validPositions[board[3][3][3] - 1]
+            pos = self.validPositions[action]
+            #make sure we start from player
+            assert (self.getPosition(board, orig) == player)
+            #make sure it's empty
+            assert(self.getPosition(board, pos) == 0)
+            board[0][orig[1]][orig[1]] = 0
+            board[0][pos[1]][pos[1]] = player
+            # make sure flag is used only once
+            board[3][3][3] = 0
+
             pass
+        # # phase 3
+        # if category >= 0 and category <= 2:
+        #     pieces = list(filter(lambda x: self.getPosition(board, x) == player, self.validPositions))
+        #     (x, y) = pieces[category]  # from
+        #     board[y][x] = 0
+        #     (x, y) = self.validPositions[action % 24]  # to
+        #     board[y][x] = player
+        #     pos = (x, y)
+        #     pass
+        # # phase 1
+        # elif category == 3:
+        #     (x, y) = self.validPositions[action % 24]
+        #     board[0][y][x] = player
+        #     pos = (x, y)
+        #     pass
+        # # capture
+        # elif category == 4:
+        #     # make sure flag is used only once
+        #     board[3][3] = board[3][3] % 200
+        #     player_no = board[3][3] // 10
+        #     opponent_no = board[3][3] % 10
+        #     opponent_no -= 1  # decrease one piece
+        #     board[3][3] = player_no * 10 + opponent_no
+        #     # remove piece
+        #     (x, y) = self.validPositions[action % 24]
+        #     board[y][x] = 0
+        #     pos = (x, y)
+        #     pass
+        # # move
+        # else:  # category > 4:
+        #     action -= 5 * 24
+        #     move = self.validActions[action]
+        #     (x, y) = move[0]  # from
+        #     if board[y][x] != player:
+        #         a = 99
+        #     board[y][x] = 0
+        #     (x, y) = move[1]  # to
+        #     if board[y][x] != 0:
+        #         a = 99
+        #     board[y][x] = player
+        #     pos = (x, y)
+        #     pass
         # if a mill, keep the player
-        if self.isInAMill(board, pos, player):
-            board[3][3] += 200  # flag that a capture can be made
+        if board[3][3][3] > 0:
             return (board, player)
-        else:
+        elif self.isInAMill(board, pos, player):
+            board[3][3][3] = -1  # flag that a capture can be made
+            return (board, player)
+
             # board[3][3] = (board[3][3] // 10) + (board[3][3] % 10) * 10
+        else:
             return (board, -player)
 
     def getValidMoves(self, board, player):
@@ -432,17 +477,39 @@ class Game():
         hh = ''
         for (x, y) in self.validPositions:
             hh += str(board[0][y][x])
-        hh = hh + "-"
+        hh = hh + " "
         hh = hh + str(board[1][3][3]) #player
-        hh = hh + "-"
+        hh = hh + " "
         hh = hh + str(board[2][3][3]) #opponent
-        hh = hh + "-"
-        hh = hh + str(board[3][3][3])  #capture
+        hh = hh + " "
+        hh = hh + str(board[3][3][3]) #capture
         return hh
 
     def getPosition(self, board, pos):
         (x, y) = pos
         return board[0][y][x]
+
+    def setPosition(self, board, pos, value):
+        (x, y) = pos
+        board[0][y][x] = value
+
+    def getPlayerCount(self, board):
+        return board[1][3][3]
+
+    def setPlayerCount(self, board, count):
+        board[1][3][3] = count
+
+    def getOpponentCount(self, board):
+        return board[2][3][3]
+
+    def setOpponentCount(self, board, count):
+        board[2][3][3] = count
+
+    def getBoardStatus(self, board):
+        return board[3][3][3]
+
+    def setBoardStatus(self, board, status):
+        board[3][3][3] = status
 
     def isMill(self, board, mill, player):
         count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0),
@@ -464,32 +531,50 @@ class Game():
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if board[3][3][3] == 1:
+        if board[3][3][3] == -1 and player == 1:
             available_opponent_pieces = list(
                 filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
-            result = [4 * 24 + self.validPositions.index(x) for x in result]
-            board[3][3][3] = 0 #capture once
+            result = [self.validPositions.index(x) for x in result]
+            # board[3][3][3] = 0 #capture once
             if len(result) > 0:
                 return result  # else choose another move
             else:
                 print("can't capture")
+        #move piece, select destination, phase 2 or 3
 
-        pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
-                                           self.validPositions, 0)
+
+        # pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
+        #                                    self.validPositions, 0)
+        pieces_on_board = len([0 for pos in self.validPositions if self.getPosition(board, pos) == player])
         result = []
 
         player_no = board[1][3][3] if player == 1 else board[2][3][3]
-        if player_no > pieces_on_board:
+
+        if board[3][3][3] > 0 and player == 1:
+            #select those actions that originate in the stored position
+            (x, y) = self.validPositions[board[3][3][3]-1]
+
+            result = list(filter(lambda a: a[0] == (x, y) , self.validActions))
+            result = [x[1] for x in result if self.getPosition(board, x[1]) == 0]
+            result = set(result)
+            result = [self.validPositions.index(x) for x in result]
+            return result
+        if player_no > pieces_on_board:#there are still pieces to put on board
             # phase 1: can put anywhere where there is an empty place
             result = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
-            result = [3 * 24 + self.validPositions.index(x) for x in result]
+            #result = [3 * 24 + self.validPositions.index(x) for x in result]
+            result = [self.validPositions.index(x) for x in result]
         elif player_no > 3:
             # phase 2: need to move a piece in a valid position
             # select all transitions that have a player piece in the first position and an empty one in the second position
             result = list(filter(lambda x: self.getPosition(board, x[0]) == player and
                                            self.getPosition(board, x[1]) == 0, self.validActions))
-            result = [5 * 24 + self.validActions.index(x) for x in result]
+            result = [x[0] for x in result]
+            result = set(result)
+            result = [self.validPositions.index(x) for x in result]
+            #this will be a move
+            # board[3][3][3] = 2
         else:
             # phase 3: when only 3 pieces left can move anywhere empty
 
@@ -503,7 +588,7 @@ class Game():
         return result
 
     def display(self, board, current_player):
-        n = board.shape[0]
+        n = board.shape[1]
         print("   ", end="")
         for y in range(n):
             print(y, "", end="")
@@ -515,7 +600,7 @@ class Game():
         for y in range(n):
             print(y, "|", end="")  # print the row #
             for x in range(n):
-                piece = board[y][x] * current_player  # get the piece to print
+                piece = board[0][y][x] * current_player  # get the piece to print
                 if piece == 1:
                     print("X ", end="")
                 elif piece == -1:
@@ -659,20 +744,13 @@ class MCTS():
         valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
         u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])) if (s, a) in self.Qsa
                else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-
+        #get action with the best ucb
         best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc , zip(valid_actions, u_values), (best_act, cur_best))
         a = best_pair[0]
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = self.game.getCanonicalForm(next_board, next_player)
-        # if self.deep > 100:
-        #     self.game.display(next_s, 1)
 
-        # if (s, a) in self.Qsa:
-        #     self.Nsa[(s, a)] += 1
-        # else:
-        #     self.Nsa[(s, a)] = 1
-        # self.Ns[s] += 1
         if self.deep > 200:
             v =  0 #draw if too much is spent playing
         else:
@@ -928,7 +1006,7 @@ class Coach():
         board = self.game.getInitBoard()
         self.curPlayer = 1
         episodeStep = 0
-
+        self.game.display(board, 1)
         while True:
             episodeStep += 1
             canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
