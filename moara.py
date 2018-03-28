@@ -9,6 +9,8 @@ from keras import Input, Model
 from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout
 from keras.optimizers import Adam
 
+import copy
+
 EPS = 1e-8
 
 
@@ -132,25 +134,9 @@ class Arena():
 
         return oneWon, twoWon, draws
 
-class Board():
-    def __repr__(self):
-        # hh = ''
-        # for (x, y) in self.game.validPositions:
-        #     if self.getPosition((x, y)) == 1:
-        #         hh += "x"
-        #     elif self.getPosition((x, y)) == -1:
-        #         hh += "o"
-        #     else:
-        #         hh += "_"
-        # hh = hh + " "
-        # hh = hh + str(self.getPlayerCount())  # player
-        # hh = hh + " "
-        # hh = hh + str(self.getOpponentCount())  # opponent
-        # hh = hh + " "
-        # hh = hh + str(self.getBoardStatus())  # capture
-        return "hh"
 
-    def init(self):
+class Board():
+    def __init__(self):
         # first plane - pieces
         arr1 = np.array([[0 for y in range(7)] for x in range(7)])
         arr1[0][0] = 1
@@ -171,7 +157,34 @@ class Board():
         # fourth plane - flag is current player must capture
         arr4 = np.array([[0 for y in range(7)] for x in range(7)])
         arr4[3][3] = 0
-        self.internalArray =  np.array([arr1, arr2, arr3, arr4])
+        self.internalArray = np.array([arr1, arr2, arr3, arr4])
+
+
+    def copy(self):
+        b = Board()
+        b.internalArray = np.copy(self.internalArray)
+        return b
+
+    def getCanonicalForm(self, player):
+        """
+        Input:
+            board: current board
+            player: current player (1 or -1)
+
+        Returns:
+            canonicalBoard: returns canonical form of board. The canonical form
+                            should be independent of player. For e.g. in chess,
+                            the canonical form can be chosen to be from the pov
+                            of white. When the player is white, we can return
+                            board as is. When the player is black, we can invert
+                            the colors and return the board.
+        """
+        if player == 1:
+            return self.copy()
+        else:
+            b = Board()
+            b.internalArray = np.array([self.internalArray[0] * player, self.internalArray[2], self.internalArray[1], self.internalArray[3] * player])
+            return b
 
     def setPosition(self, pos, value):
         (x, y) = pos
@@ -199,6 +212,24 @@ class Board():
     def setBoardStatus(self, status):
         self.internalArray[3][3][3] = status
 
+    def __repr__(self):
+        hh = ''
+        for (x, y) in Game.validPositions:
+            if self.getPosition((x, y)) == 1:
+                hh += "x"
+            elif self.getPosition((x, y)) == -1:
+                hh += "o"
+            else:
+                hh += "_"
+        hh = hh + " "
+        hh = hh + str(self.getPlayerCount())  # player
+        hh = hh + " "
+        hh = hh + str(self.getOpponentCount())  # opponent
+        hh = hh + " "
+        hh = hh + str(self.getBoardStatus())  # capture
+        return hh
+
+
 class Game():
     """
     This class specifies the base Game class. To define your own game, subclass
@@ -210,90 +241,91 @@ class Game():
     See othello/OthelloGame.py for an example implementation.
     """
 
+    # valid position where pieces reside
+    validPositions = [(0, 0), (0, 3), (0, 6),
+                      (1, 1), (1, 3), (1, 5),
+                      (2, 2), (2, 3), (2, 4),
+                      (3, 0), (3, 1), (3, 2),
+                      (3, 4), (3, 5), (3, 6),
+                      (4, 2), (4, 3), (4, 4),
+                      (5, 1), (5, 3), (5, 5),
+                      (6, 0), (6, 3), (6, 6)]
+    # transition from one position to another
+    validActions = [
+        # move pieces on the table
+        # horizontal
+        ((0, 0), (0, 3)), ((0, 3), (0, 6)),
+        ((0, 3), (0, 0)), ((0, 6), (0, 3)),
+
+        ((1, 1), (1, 3)), ((1, 3), (1, 5)),
+        ((1, 3), (1, 1)), ((1, 5), (1, 3)),
+
+        ((2, 2), (2, 3)), ((2, 3), (2, 4)),
+        ((2, 3), (2, 2)), ((2, 4), (2, 3)),
+
+        ((3, 0), (3, 1)), ((3, 1), (3, 2)),
+        ((3, 1), (3, 0)), ((3, 2), (3, 1)),
+
+        ((3, 4), (3, 5)), ((3, 5), (3, 6)),
+        ((3, 5), (3, 4)), ((3, 6), (3, 5)),
+
+        ((4, 2), (4, 3)), ((4, 3), (4, 4)),
+        ((4, 3), (4, 2)), ((4, 4), (4, 3)),
+
+        ((5, 1), (5, 3)), ((5, 3), (5, 5)),
+        ((5, 3), (5, 1)), ((5, 5), (5, 3)),
+
+        ((6, 0), (6, 3)), ((6, 3), (6, 6)),
+        ((6, 3), (6, 0)), ((6, 6), (6, 3)),
+        # vertical
+        ((0, 0), (3, 0)), ((3, 0), (6, 0)),
+        ((3, 0), (0, 0)), ((6, 0), (3, 0)),
+
+        ((1, 1), (3, 1)), ((3, 1), (5, 1)),
+        ((3, 1), (1, 1)), ((5, 1), (3, 1)),
+
+        ((2, 2), (3, 2)), ((3, 2), (4, 2)),
+        ((3, 2), (2, 2)), ((4, 2), (3, 2)),
+
+        ((0, 3), (1, 3)), ((1, 3), (2, 3)),
+        ((1, 3), (0, 3)), ((2, 3), (1, 3)),
+
+        ((4, 3), (5, 3)), ((5, 3), (6, 3)),
+        ((5, 3), (4, 3)), ((6, 3), (5, 3)),
+
+        ((2, 4), (3, 4)), ((3, 4), (4, 4)),
+        ((3, 4), (2, 4)), ((4, 4), (3, 4)),
+
+        ((1, 5), (3, 5)), ((3, 5), (5, 5)),
+        ((3, 5), (1, 5)), ((5, 5), (3, 5)),
+
+        ((0, 6), (3, 6)), ((3, 6), (6, 6)),
+        ((3, 6), (0, 6)), ((6, 6), (3, 6))
+    ]
+
+    mills = [
+        # horizontal
+        ((0, 0), (0, 3), (0, 6)),
+        ((1, 1), (1, 3), (1, 5)),
+        ((2, 2), (2, 3), (2, 4)),
+        ((3, 0), (3, 1), (3, 2)),
+        ((3, 4), (3, 5), (3, 6)),
+        ((4, 2), (4, 3), (4, 4)),
+        ((5, 1), (5, 3), (5, 5)),
+        ((6, 0), (6, 3), (6, 6)),
+        # vertical
+        ((0, 0), (3, 0), (6, 0)),
+        ((1, 1), (3, 1), (5, 1)),
+        ((2, 2), (3, 2), (4, 2)),
+        ((0, 3), (1, 3), (2, 3)),
+        ((4, 3), (5, 3), (6, 3)),
+        ((2, 4), (3, 4), (4, 4)),
+        ((1, 5), (3, 5), (5, 5)),
+        ((0, 6), (3, 6), (6, 6))
+    ]
+
     def __init__(self):
         self.n = 7
-        # valid position where pieces reside
-        self.validPositions = [(0, 0), (0, 3), (0, 6),
-                               (1, 1), (1, 3), (1, 5),
-                               (2, 2), (2, 3), (2, 4),
-                               (3, 0), (3, 1), (3, 2),
-                               (3, 4), (3, 5), (3, 6),
-                               (4, 2), (4, 3), (4, 4),
-                               (5, 1), (5, 3), (5, 5),
-                               (6, 0), (6, 3), (6, 6)]
-        # transition from one position to another
-        self.validActions = [
-            # move pieces on the table
-            # horizontal
-            ((0, 0), (0, 3)), ((0, 3), (0, 6)),
-            ((0, 3), (0, 0)), ((0, 6), (0, 3)),
-
-            ((1, 1), (1, 3)), ((1, 3), (1, 5)),
-            ((1, 3), (1, 1)), ((1, 5), (1, 3)),
-
-            ((2, 2), (2, 3)), ((2, 3), (2, 4)),
-            ((2, 3), (2, 2)), ((2, 4), (2, 3)),
-
-            ((3, 0), (3, 1)), ((3, 1), (3, 2)),
-            ((3, 1), (3, 0)), ((3, 2), (3, 1)),
-
-            ((3, 4), (3, 5)), ((3, 5), (3, 6)),
-            ((3, 5), (3, 4)), ((3, 6), (3, 5)),
-
-            ((4, 2), (4, 3)), ((4, 3), (4, 4)),
-            ((4, 3), (4, 2)), ((4, 4), (4, 3)),
-
-            ((5, 1), (5, 3)), ((5, 3), (5, 5)),
-            ((5, 3), (5, 1)), ((5, 5), (5, 3)),
-
-            ((6, 0), (6, 3)), ((6, 3), (6, 6)),
-            ((6, 3), (6, 0)), ((6, 6), (6, 3)),
-            # vertical
-            ((0, 0), (3, 0)), ((3, 0), (6, 0)),
-            ((3, 0), (0, 0)), ((6, 0), (3, 0)),
-
-            ((1, 1), (3, 1)), ((3, 1), (5, 1)),
-            ((3, 1), (1, 1)), ((5, 1), (3, 1)),
-
-            ((2, 2), (3, 2)), ((3, 2), (4, 2)),
-            ((3, 2), (2, 2)), ((4, 2), (3, 2)),
-
-            ((0, 3), (1, 3)), ((1, 3), (2, 3)),
-            ((1, 3), (0, 3)), ((2, 3), (1, 3)),
-
-            ((4, 3), (5, 3)), ((5, 3), (6, 3)),
-            ((5, 3), (4, 3)), ((6, 3), (5, 3)),
-
-            ((2, 4), (3, 4)), ((3, 4), (4, 4)),
-            ((3, 4), (2, 4)), ((4, 4), (3, 4)),
-
-            ((1, 5), (3, 5)), ((3, 5), (5, 5)),
-            ((3, 5), (1, 5)), ((5, 5), (3, 5)),
-
-            ((0, 6), (3, 6)), ((3, 6), (6, 6)),
-            ((3, 6), (0, 6)), ((6, 6), (3, 6))
-        ]
-
-        self.mills = [
-            # horizontal
-            ((0, 0), (0, 3), (0, 6)),
-            ((1, 1), (1, 3), (1, 5)),
-            ((2, 2), (2, 3), (2, 4)),
-            ((3, 0), (3, 1), (3, 2)),
-            ((3, 4), (3, 5), (3, 6)),
-            ((4, 2), (4, 3), (4, 4)),
-            ((5, 1), (5, 3), (5, 5)),
-            ((6, 0), (6, 3), (6, 6)),
-            # vertical
-            ((0, 0), (3, 0), (6, 0)),
-            ((1, 1), (3, 1), (5, 1)),
-            ((2, 2), (3, 2), (4, 2)),
-            ((0, 3), (1, 3), (2, 3)),
-            ((4, 3), (5, 3), (6, 3)),
-            ((2, 4), (3, 4), (4, 4)),
-            ((1, 5), (3, 5), (5, 5)),
-            ((0, 6), (3, 6), (6, 6))
-        ]
 
     def getInitBoard(self):
         """
@@ -314,7 +346,7 @@ class Game():
         #         24 +  # put piece
         #         24 +  # capture piece
         #         len(self.validActions))  # move piece
-        return 24 + 1 #number of positions + pass
+        return 24 + 1  # number of positions + pass
 
     def getNextState(self, canonicalBoard, player, action):
         """
@@ -329,53 +361,53 @@ class Game():
         """
         # if player takes action on board, return next (board,player)
 
-        #if player must make a move or capture, i.e. board status != 0,
-        #the opponent takes a dummy move, nothing changes
-        if action == 24: #pass
+        # if player must make a move or capture, i.e. board status != 0,
+        # the opponent takes a dummy move, nothing changes
+        if action == 24:  # pass
             return canonicalBoard, -player
 
         # action must be a valid move
-        board = np.copy(canonicalBoard)
+        board = canonicalBoard.copy()
         pos = (3, 3)
         # phase
         # category = action // 24
 
         # phase 1
-        if self.getBoardStatus(board) == 0:#select/put piece
-            pieces_on_board = len([0 for pos in self.validPositions if self.getPosition(board, pos) == player])
-            player_no = self.getPlayerCount(board) if player == 1 else self.getOpponentCount(board)
+        if board.getBoardStatus() == 0:  # select/put piece
+            pieces_on_board = len([0 for pos in Game.validPositions if board.getPosition(pos) == player])
+            player_no = board.getPlayerCount() if player == 1 else board.getOpponentCount()
             if player_no > pieces_on_board:  # put
-                pos = self.validPositions[action]
-                self.setPosition(board, pos, player)
+                pos = Game.validPositions[action]
+                board.setPosition(pos, player)
             else:  # prepare move
-                self.setBoardStatus(board, action + 1)
+                board.setBoardStatus(action + 1)
 
-        elif self.getBoardStatus(board) == 100: #capture
+        elif board.getBoardStatus() == 100:  # capture
             # make sure flag is used only once
-            self.setBoardStatus(board, 0)
+            board.setBoardStatus(0)
             # remove piece
-            pos = self.validPositions[action]
-            self.setPosition(board, pos, 0)
-            self.setOpponentCount(board, self.getOpponentCount(board) - 1)
+            pos = Game.validPositions[action]
+            board.setPosition(pos, 0)
+            board.setOpponentCount(self.getOpponentCount(board) - 1)
             pass
-        elif self.getBoardStatus(board) != 0:#move
-            orig = self.validPositions[abs(self.getBoardStatus(board)) - 1]
-            pos = self.validPositions[action]
+        elif board.getBoardStatus() != 0:  # move
+            orig = Game.validPositions[abs(board.getBoardStatus()) - 1]
+            pos = Game.validPositions[action]
             # make sure we start from player
-            if self.getPosition(board, orig) != player:
+            if board.getPosition(orig) != player:
                 aaa = 3
-            assert (self.getPosition(board, orig) == player)
+            assert (board.getPosition(orig) == player)
             # make sure it's empty
-            if self.getPosition(board, pos) != 0:
+            if board.getPosition(pos) != 0:
                 aaa = 3
-            assert (self.getPosition(board, pos) == 0)
+            assert (board.getPosition(pos) == 0)
 
-            self.setPosition(board, orig, 0)
-            self.setPosition(board, pos, player)
+            board.setPosition(orig, 0)
+            board.setPosition(pos, player)
             # make sure flag is used only once
-            self.setBoardStatus(board, 0)
+            board.setBoardStatus(0)
         if self.isInAMill(board, pos, player):
-            self.setBoardStatus(board, 100)  # flag that a capture can be made
+            board.setBoardStatus(100)  # flag that a capture can be made
         return board, -player
 
     def getValidMoves(self, board, player):
@@ -418,30 +450,11 @@ class Game():
         opponent_valid = self.getLegalMoves(board, -player)
         if player_valid == [] and opponent_valid == []:
             return 0  # draw
-        if self.getOpponentCount(board) < 3 or opponent_valid == []:
+        if board.getOpponentCount() < 3 or opponent_valid == []:
             return 1
-        if self.getPlayerCount(board) < 3 or player_valid == []:
+        if board.getPlayerCount() < 3 or player_valid == []:
             return -1
         return 777
-
-    def getCanonicalForm(self, board, player):
-        """
-        Input:
-            board: current board
-            player: current player (1 or -1)
-
-        Returns:
-            canonicalBoard: returns canonical form of board. The canonical form
-                            should be independent of player. For e.g. in chess,
-                            the canonical form can be chosen to be from the pov
-                            of white. When the player is white, we can return
-                            board as is. When the player is black, we can invert
-                            the colors and return the board.
-        """
-        if player == 1:
-            return board
-        else:
-            return np.array([board[0] * player, board[2], board[1], board[3] * player])
 
     def getSymmetries(self, board, pi):
         """
@@ -456,13 +469,8 @@ class Game():
         """
         return [(board, pi)]
 
-
-
-
-
-
     def isMill(self, board, mill, player):
-        count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0),
+        count = functools.reduce(lambda acc, i: acc + (1 if board.getPosition(mill[i]) == player else 0),
                                  range(3), 0)
 
         if count == 3:
@@ -473,26 +481,26 @@ class Game():
     # is the piece in a mill of a player?
     def isInAMill(self, board, pos, player):
         # find all mills that contain the pos
-        mill_list = list(filter(lambda mill: list(filter(lambda p: p == pos, mill)) != [], self.mills))
+        mill_list = list(filter(lambda mill: list(filter(lambda p: p == pos, mill)) != [], Game.mills))
         return list(filter(lambda x: self.isMill(board, x, player) == 1, mill_list)) != []
 
     def getLegalMoves(self, board, player):
-        if self.getBoardStatus(board) < 0:
+        if board.getBoardStatus() < 0:
             xxx = 0
 
-        #opposite player passes
-        if self.getBoardStatus(board) != 0 and np.sign(self.getBoardStatus(board)) != np.sign(player):
-            return [24] #pass
+        # opposite player passes
+        if board.getBoardStatus() != 0 and np.sign(board.getBoardStatus()) != np.sign(player):
+            return [24]  # pass
 
         # only if the last move results in a mill
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if self.getBoardStatus(board) == 100 and player == 1:
+        if board.getBoardStatus() == 100 and player == 1:
             available_opponent_pieces = list(
-                filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
+                filter(lambda x: board.getPosition(x) == -player, Game.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
-            result = [self.validPositions.index(x) for x in result]
+            result = [Game.validPositions.index(x) for x in result]
             if len(result) > 0:
                 return result  # else choose another move
             else:
@@ -502,43 +510,42 @@ class Game():
 
         # pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
         #                                    self.validPositions, 0)
-        pieces_on_board = len([0 for pos in self.validPositions if self.getPosition(board, pos) == player])
+        pieces_on_board = len([0 for pos in self.validPositions if board.getPosition(pos) == player])
         result = []
 
-        player_no = self.getPlayerCount(board) if player == 1 else self.getOpponentCount(board)
+        player_no = board.getPlayerCount() if player == 1 else board.getOpponentCount()
 
-        if self.getBoardStatus(board) != 0 and player == 1:
-
+        if board.getBoardStatus() != 0 and player == 1:
             # select those actions that originate in the stored position
-            (x, y) = self.validPositions[self.getBoardStatus(board) - 1]
+            (x, y) = Game.validPositions[board.getBoardStatus() - 1]
 
-            result = list(filter(lambda a: a[0] == (x, y), self.validActions))
-            result = [x[1] for x in result if self.getPosition(board, x[1]) == 0]
+            result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
+            result = [x[1] for x in result if board.getPosition(x[1]) == 0]
             result = set(result)
-            result = [self.validPositions.index(x) for x in result]
+            result = [Game.validPositions.index(x) for x in result]
             return result
         if player_no > pieces_on_board:  # there are still pieces to put on board
             # phase 1: can put anywhere where there is an empty place
-            result = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
+            result = list(filter(lambda x: board.getPosition(x) == 0, Game.validPositions))
             # result = [3 * 24 + self.validPositions.index(x) for x in result]
-            result = [self.validPositions.index(x) for x in result]
+            result = [Game.validPositions.index(x) for x in result]
         elif player_no > 3:
             # phase 2: need to move a piece in a valid position
             # select all transitions that have a player piece in the first position and an empty one in the second position
-            result = list(filter(lambda x: self.getPosition(board, x[0]) == player and
-                                           self.getPosition(board, x[1]) == 0, self.validActions))
+            result = list(filter(lambda x: board.getPosition(x[0]) == player and
+                                           board.getPosition(x[1]) == 0, Game.validActions))
             result = [x[0] for x in result]
             result = set(result)
-            result = [self.validPositions.index(x) for x in result]
+            result = [Game.validPositions.index(x) for x in result]
         elif player_no == 3:
             # phase 3: when only 3 pieces left can move anywhere empty
 
-            result = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
-            result = [self.validPositions.index(x) for x in result]
+            result = list(filter(lambda x: board.getPosition(x) == 0, Game.validPositions))
+            result = [Game.validPositions.index(x) for x in result]
         return result
 
-    def display(self, board, current_player, invariant = 1):
-        n = board.shape[1]
+    def display(self, board, current_player, invariant=1):
+        n = board.internalArray.shape[1]
         print("   ", end="")
         for y in range(n):
             print(y, "", end="")
@@ -550,23 +557,23 @@ class Game():
         for y in range(n):
             print(y, "|", end="")  # print the row #
             for x in range(n):
-                piece = self.getPosition(board, (x, y)) * current_player * invariant # get the piece to print
+                piece = board.getPosition((x, y)) * current_player * invariant  # get the piece to print
                 if piece == 1:
                     print("X ", end="")
                 elif piece == -1:
                     print("O ", end="")
                 else:
-                    if (y, x) in self.validPositions:
+                    if (y, x) in Game.validPositions:
                         if x == n:
                             print(".", end="")
                         else:
                             print(". ", end="")
                     else:
-                        if x == 3 and y == 3 and self.getBoardStatus(board) != 0:
-                            if np.sign(self.getBoardStatus(board)) == 1:
-                                print(chr(96 + abs(self.getBoardStatus(board))), end=" ")
+                        if x == 3 and y == 3 and board.getBoardStatus() != 0:
+                            if np.sign(board.getBoardStatus()) == 1:
+                                print(chr(96 + abs(board.getBoardStatus())), end=" ")
                             else:
-                                print(chr(96 + abs(self.getBoardStatus(board))), end="-")
+                                print(chr(96 + abs(board.getBoardStatus())), end="-")
                         elif x == n:
                             print(" ", end="")
                         else:
@@ -650,7 +657,7 @@ class MCTS():
         self.deep += 1
         if self.deep > 100:
             stop = 1
-        s = self.game.stringRepresentation(canonicalBoard)
+        s = str(canonicalBoard)
         print(s)
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
@@ -678,7 +685,8 @@ class MCTS():
             self.Ps[s] = ps
             self.Vs[s] = validMoves
             self.Ns[s] = 0
-            # print(s)
+            print(".............................................")
+
             return -v[0]
 
         valids = self.Vs[s]
@@ -711,7 +719,7 @@ class MCTS():
         a = best_pair[0]
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
-        next_s = self.game.getCanonicalForm(next_board, next_player)
+        next_s = next_board.getCanonicalForm(next_player)
         # self.game.display(next_s,next_player, -1)
         if self.deep > 200:
             v = 0  # draw if too much is spent playing
@@ -726,7 +734,7 @@ class MCTS():
             self.Qsa[(s, a)] = v
             self.Nsa[(s, a)] = 1
         self.Ns[s] += 1
-        return v * next_player
+        return -v
 
 
 class NeuralNet():
@@ -798,7 +806,7 @@ class NeuralNet():
             v: a float in [-1,1] that gives the value of the current board
         """
 
-        board = board[np.newaxis, :, :]
+        board = board.internalArray[np.newaxis, :, :]
         pi, v = self.model.predict(board)
         return pi[0], v[0]
 
@@ -948,7 +956,7 @@ class Coach():
         self.game.display(board, 1)
         while True:
             episodeStep += 1
-            canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
+            canonicalBoard = board.getCanonicalForm(self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
             # temp = 1
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
@@ -960,12 +968,14 @@ class Coach():
 
             s = self.game.stringRepresentation(canonicalBoard)
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
-            print(str(episodeStep) + ": " + str(self.game.getPlayerCount(board)) + " - " + str(self.game.getOpponentCount(board)))
+            print(str(episodeStep) + ": " + str(self.game.getPlayerCount(board)) + " - " + str(
+                self.game.getOpponentCount(board)))
             if self.game.getBoardStatus(board) == 0:
                 self.game.display(board, 1)
                 if (s, action) in self.mcts.Qsa:
                     print(
-                        str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(
+                        str(episodeStep) + ": " + str(
+                            self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(
                             board))
             r = self.game.getGameEnded(board, self.curPlayer)
 
