@@ -132,6 +132,72 @@ class Arena():
 
         return oneWon, twoWon, draws
 
+class Board():
+    def __repr__(self):
+        # hh = ''
+        # for (x, y) in self.game.validPositions:
+        #     if self.getPosition((x, y)) == 1:
+        #         hh += "x"
+        #     elif self.getPosition((x, y)) == -1:
+        #         hh += "o"
+        #     else:
+        #         hh += "_"
+        # hh = hh + " "
+        # hh = hh + str(self.getPlayerCount())  # player
+        # hh = hh + " "
+        # hh = hh + str(self.getOpponentCount())  # opponent
+        # hh = hh + " "
+        # hh = hh + str(self.getBoardStatus())  # capture
+        return "hh"
+
+    def init(self):
+        # first plane - pieces
+        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr1[0][0] = 1
+        arr1[3][0] = 1
+        arr1[6][0] = 1
+        arr1[4][4] = 1
+        arr1[6][6] = 1
+        arr1[2][2] = -1
+        arr1[1][1] = -1
+        arr1[3][1] = -1
+        arr1[5][1] = -1
+        # second plane - number of pieces for player 1
+        arr2 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr2[3][3] = 5  # player/opponent
+        # third plane - number of pieces for player 2
+        arr3 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr3[3][3] = 4  # player/opponent
+        # fourth plane - flag is current player must capture
+        arr4 = np.array([[0 for y in range(7)] for x in range(7)])
+        arr4[3][3] = 0
+        self.internalArray =  np.array([arr1, arr2, arr3, arr4])
+
+    def setPosition(self, pos, value):
+        (x, y) = pos
+        self.internalArray[0][y][x] = value
+
+    def getPosition(self, pos):
+        (x, y) = pos
+        return self.internalArray[0][y][x]
+
+    def getPlayerCount(self):
+        return self.internalArray[1][3][3]
+
+    def setPlayerCount(self, count):
+        self.internalArray[1][3][3] = count
+
+    def getOpponentCount(self):
+        return self.internalArray[2][3][3]
+
+    def setOpponentCount(self, count):
+        self.internalArray[2][3][3] = count
+
+    def getBoardStatus(self):
+        return self.internalArray[3][3][3]
+
+    def setBoardStatus(self, status):
+        self.internalArray[3][3][3] = status
 
 class Game():
     """
@@ -159,17 +225,17 @@ class Game():
         self.validActions = [
             # move pieces on the table
             # horizontal
-            ((0, 0), (0, 3)), ((0, 3), (0, 0)),
-            ((0, 3), (0, 6)), ((0, 6), (0, 3)),
+            ((0, 0), (0, 3)), ((0, 3), (0, 6)),
+            ((0, 3), (0, 0)), ((0, 6), (0, 3)),
 
-            ((1, 1), (1, 3)), ((1, 3), (1, 1)),
-            ((1, 3), (1, 5)), ((1, 5), (1, 3)),
+            ((1, 1), (1, 3)), ((1, 3), (1, 5)),
+            ((1, 3), (1, 1)), ((1, 5), (1, 3)),
 
             ((2, 2), (2, 3)), ((2, 3), (2, 4)),
             ((2, 3), (2, 2)), ((2, 4), (2, 3)),
 
             ((3, 0), (3, 1)), ((3, 1), (3, 2)),
-            ((3, 1), (3, 3)), ((3, 2), (3, 1)),
+            ((3, 1), (3, 0)), ((3, 2), (3, 1)),
 
             ((3, 4), (3, 5)), ((3, 5), (3, 6)),
             ((3, 5), (3, 4)), ((3, 6), (3, 5)),
@@ -181,7 +247,7 @@ class Game():
             ((5, 3), (5, 1)), ((5, 5), (5, 3)),
 
             ((6, 0), (6, 3)), ((6, 3), (6, 6)),
-            ((6, 3), (6, 0)), ((6, 3), (6, 6)),
+            ((6, 3), (6, 0)), ((6, 6), (6, 3)),
             # vertical
             ((0, 0), (3, 0)), ((3, 0), (6, 0)),
             ((3, 0), (0, 0)), ((6, 0), (3, 0)),
@@ -235,33 +301,7 @@ class Game():
             startBoard: a representation of the board (ideally this is the form
                         that will be the input to your neural network)
         """
-        # first plane - pieces
-        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr1[0][0] = 1
-        arr1[3][0] = 1
-        arr1[6][0] = 1
-        arr1[4][4] = 1
-        arr1[2][2] = -1
-        arr1[1][1] = -1
-        arr1[3][1] = -1
-        arr1[5][1] = -1
-        # second plane - number of pieces for player 1
-        arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr2[3][3] = 4  # player/opponent
-        # third plane - number of pieces for player 2
-        arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr3[3][3] = 4  # player/opponent
-        # fourth plane - flag is current player must capture
-        arr4 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr4[3][3] = 0
-        return np.array([arr1, arr2, arr3, arr4])
-
-    def getBoardSize(self):
-        """
-        Returns:
-            (x,y): a tuple of board dimensions
-        """
-        pass
+        return Board()
 
     def getActionSize(self):
         """
@@ -274,7 +314,7 @@ class Game():
         #         24 +  # put piece
         #         24 +  # capture piece
         #         len(self.validActions))  # move piece
-        return 24
+        return 24 + 1 #number of positions + pass
 
     def getNextState(self, canonicalBoard, player, action):
         """
@@ -288,6 +328,12 @@ class Game():
             nextPlayer: player who plays in the next turn (should be -player)
         """
         # if player takes action on board, return next (board,player)
+
+        #if player must make a move or capture, i.e. board status != 0,
+        #the opponent takes a dummy move, nothing changes
+        if action == 24: #pass
+            return canonicalBoard, -player
+
         # action must be a valid move
         board = np.copy(canonicalBoard)
         pos = (3, 3)
@@ -295,7 +341,7 @@ class Game():
         # category = action // 24
 
         # phase 1
-        if self.getBoardStatus(board) == 0:
+        if self.getBoardStatus(board) == 0:#select/put piece
             pieces_on_board = len([0 for pos in self.validPositions if self.getPosition(board, pos) == player])
             player_no = self.getPlayerCount(board) if player == 1 else self.getOpponentCount(board)
             if player_no > pieces_on_board:  # put
@@ -304,7 +350,7 @@ class Game():
             else:  # prepare move
                 self.setBoardStatus(board, action + 1)
 
-        elif self.getBoardStatus(board) == -1:
+        elif self.getBoardStatus(board) == 100: #capture
             # make sure flag is used only once
             self.setBoardStatus(board, 0)
             # remove piece
@@ -312,69 +358,25 @@ class Game():
             self.setPosition(board, pos, 0)
             self.setOpponentCount(board, self.getOpponentCount(board) - 1)
             pass
-        elif self.getBoardStatus(board) > 0:
-            orig = self.validPositions[self.getBoardStatus(board) - 1]
+        elif self.getBoardStatus(board) != 0:#move
+            orig = self.validPositions[abs(self.getBoardStatus(board)) - 1]
             pos = self.validPositions[action]
             # make sure we start from player
+            if self.getPosition(board, orig) != player:
+                aaa = 3
             assert (self.getPosition(board, orig) == player)
             # make sure it's empty
+            if self.getPosition(board, pos) != 0:
+                aaa = 3
             assert (self.getPosition(board, pos) == 0)
+
             self.setPosition(board, orig, 0)
             self.setPosition(board, pos, player)
             # make sure flag is used only once
             self.setBoardStatus(board, 0)
-
-            pass
-        # # phase 3
-        # if category >= 0 and category <= 2:
-        #     pieces = list(filter(lambda x: self.getPosition(board, x) == player, self.validPositions))
-        #     (x, y) = pieces[category]  # from
-        #     board[y][x] = 0
-        #     (x, y) = self.validPositions[action % 24]  # to
-        #     board[y][x] = player
-        #     pos = (x, y)
-        #     pass
-        # # phase 1
-        # elif category == 3:
-        #     (x, y) = self.validPositions[action % 24]
-        #     board[0][y][x] = player
-        #     pos = (x, y)
-        #     pass
-        # # capture
-        # elif category == 4:
-        #     # make sure flag is used only once
-        #     board[3][3] = board[3][3] % 200
-        #     player_no = board[3][3] // 10
-        #     opponent_no = board[3][3] % 10
-        #     opponent_no -= 1  # decrease one piece
-        #     board[3][3] = player_no * 10 + opponent_no
-        #     # remove piece
-        #     (x, y) = self.validPositions[action % 24]
-        #     board[y][x] = 0
-        #     pos = (x, y)
-        #     pass
-        # # move
-        # else:  # category > 4:
-        #     action -= 5 * 24
-        #     move = self.validActions[action]
-        #     (x, y) = move[0]  # from
-        #     if board[y][x] != player:
-        #         a = 99
-        #     board[y][x] = 0
-        #     (x, y) = move[1]  # to
-        #     if board[y][x] != 0:
-        #         a = 99
-        #     board[y][x] = player
-        #     pos = (x, y)
-        #     pass
-        # if a mill, keep the player
-        if self.getBoardStatus(board) > 0:
-            return board, player
-        elif self.isInAMill(board, pos, player):
-            self.setBoardStatus(board, -1)  # flag that a capture can be made
-            return board, player
-        else:
-            return board, -player
+        if self.isInAMill(board, pos, player):
+            self.setBoardStatus(board, 100)  # flag that a capture can be made
+        return board, -player
 
     def getValidMoves(self, board, player):
         """
@@ -436,18 +438,10 @@ class Game():
                             board as is. When the player is black, we can invert
                             the colors and return the board.
         """
-        # b = player * board
-        # if player == -1:
-        #     # switch digits - first one is crt player
-        #     # c = abs(b[3][3]) // 200
-        #     # r = abs(b[3][3]) % 200
-        #     # b[3][3] = (r // 10) + (r % 10) * 10 + 200 * c
-        #     b[3][3] = abs(b[3][3])
-
         if player == 1:
             return board
         else:
-            return np.array([board[0] * player, board[2], board[1], board[3]])
+            return np.array([board[0] * player, board[2], board[1], board[3] * player])
 
     def getSymmetries(self, board, pi):
         """
@@ -462,51 +456,10 @@ class Game():
         """
         return [(board, pi)]
 
-    def stringRepresentation(self, board):
-        """
-        Input:
-            board: current board
 
-        Returns:
-            boardString: a quick conversion of board to a string format.
-                         Required by MCTS for hashing.
-        """
-        hh = ''
-        for (x, y) in self.validPositions:
-            hh += str(self.getPosition(board, (x, y)))
-        hh = hh + " "
-        hh = hh + str(self.getPlayerCount(board))  # player
-        hh = hh + " "
-        hh = hh + str(self.getOpponentCount(board))  # opponent
-        hh = hh + " "
-        hh = hh + str(self.getBoardStatus(board))  # capture
-        return hh
 
-    def getPosition(self, board, pos):
-        (x, y) = pos
-        return board[0][y][x]
 
-    def setPosition(self, board, pos, value):
-        (x, y) = pos
-        board[0][y][x] = value
 
-    def getPlayerCount(self, board):
-        return board[1][3][3]
-
-    def setPlayerCount(self, board, count):
-        board[1][3][3] = count
-
-    def getOpponentCount(self, board):
-        return board[2][3][3]
-
-    def setOpponentCount(self, board, count):
-        board[2][3][3] = count
-
-    def getBoardStatus(self, board):
-        return board[3][3][3]
-
-    def setBoardStatus(self, board, status):
-        board[3][3][3] = status
 
     def isMill(self, board, mill, player):
         count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(board, mill[i]) == player else 0),
@@ -524,11 +477,18 @@ class Game():
         return list(filter(lambda x: self.isMill(board, x, player) == 1, mill_list)) != []
 
     def getLegalMoves(self, board, player):
+        if self.getBoardStatus(board) < 0:
+            xxx = 0
+
+        #opposite player passes
+        if self.getBoardStatus(board) != 0 and np.sign(self.getBoardStatus(board)) != np.sign(player):
+            return [24] #pass
+
         # only if the last move results in a mill
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if self.getBoardStatus(board) == -1 and player == 1:
+        if self.getBoardStatus(board) == 100 and player == 1:
             available_opponent_pieces = list(
                 filter(lambda x: self.getPosition(board, x) == -player, self.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
@@ -547,7 +507,8 @@ class Game():
 
         player_no = self.getPlayerCount(board) if player == 1 else self.getOpponentCount(board)
 
-        if self.getBoardStatus(board) > 0 and player == 1:
+        if self.getBoardStatus(board) != 0 and player == 1:
+
             # select those actions that originate in the stored position
             (x, y) = self.validPositions[self.getBoardStatus(board) - 1]
 
@@ -572,16 +533,11 @@ class Game():
         elif player_no == 3:
             # phase 3: when only 3 pieces left can move anywhere empty
 
-            empty = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
-            # first pieces
-            result = [0 * 24 + self.validPositions.index(x) for x in empty]
-            # second piece
-            result += [1 * 24 + self.validPositions.index(x) for x in empty]
-            # third piece
-            result += [2 * 24 + self.validPositions.index(x) for x in empty]
+            result = list(filter(lambda x: self.getPosition(board, x) == 0, self.validPositions))
+            result = [self.validPositions.index(x) for x in result]
         return result
 
-    def display(self, board, current_player):
+    def display(self, board, current_player, invariant = 1):
         n = board.shape[1]
         print("   ", end="")
         for y in range(n):
@@ -594,7 +550,7 @@ class Game():
         for y in range(n):
             print(y, "|", end="")  # print the row #
             for x in range(n):
-                piece = self.getPosition(board, (x, y)) * current_player  # get the piece to print
+                piece = self.getPosition(board, (x, y)) * current_player * invariant # get the piece to print
                 if piece == 1:
                     print("X ", end="")
                 elif piece == -1:
@@ -607,7 +563,10 @@ class Game():
                             print(". ", end="")
                     else:
                         if x == 3 and y == 3 and self.getBoardStatus(board) != 0:
-                            print(chr(96 + self.getBoardStatus(board)), end=" ")
+                            if np.sign(self.getBoardStatus(board)) == 1:
+                                print(chr(96 + abs(self.getBoardStatus(board))), end=" ")
+                            else:
+                                print(chr(96 + abs(self.getBoardStatus(board))), end="-")
                         elif x == n:
                             print(" ", end="")
                         else:
@@ -649,6 +608,8 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
+            print(" ")
+            print(" ")
             v = self.search(canonicalBoard)
             self.deep = 0
 
@@ -684,13 +645,13 @@ class MCTS():
         Returns:
             v: the negative of the value of the current canonicalBoard
         """
-        self.game.display(canonicalBoard, 1)
+        # self.game.display(canonicalBoard, 1)
         # print (self.deep)
         self.deep += 1
         if self.deep > 100:
             stop = 1
         s = self.game.stringRepresentation(canonicalBoard)
-
+        print(s)
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
         if self.Es[s] != 777:
@@ -751,7 +712,7 @@ class MCTS():
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = self.game.getCanonicalForm(next_board, next_player)
-        self.game.display(next_s,next_player)
+        # self.game.display(next_s,next_player, -1)
         if self.deep > 200:
             v = 0  # draw if too much is spent playing
         else:
@@ -979,30 +940,6 @@ class Coach():
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
     def executeEpisode(self):
-        # trainExamples = []
-        # board = getInitBoard()
-        # crtPlayer = 1
-        # steps = 0  # how many steps in this episode
-        #
-        # while True:
-        #     steps += 1
-        #     canonicalBoard = getCanonicalForm(board, crtPlayer)
-        #
-        #
-        #     pi = getActionProb(canonicalBoard)
-        #     # sym = getSymmetries(canonicalBoard, pi)
-        #     # for b, p in sym:
-        #     trainExamples.append([canonicalBoard, crtPlayer, pi])
-        #
-        #     action = np.random.choice(len(pi), p=pi)
-        #     category = action // 24
-        #     n = canonicalBoard[3][3]
-        #     board, crtPlayer = getNextState(board, crtPlayer, action)
-        #
-        #     r = getGameEnded(board, crtPlayer)
-        #
-        #     if r != 0:
-        #         return [(x[0], x[2], r * ((-1) ** (x[1] != crtPlayer))) for x in trainExamples]
 
         trainExamples = []
         board = self.game.getInitBoard()
@@ -1023,11 +960,13 @@ class Coach():
 
             s = self.game.stringRepresentation(canonicalBoard)
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
-            self.game.display(board, 1)
-            if (s, action) in self.mcts.Qsa:
-                print(
-                    str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(
-                        board))
+            print(str(episodeStep) + ": " + str(self.game.getPlayerCount(board)) + " - " + str(self.game.getOpponentCount(board)))
+            if self.game.getBoardStatus(board) == 0:
+                self.game.display(board, 1)
+                if (s, action) in self.mcts.Qsa:
+                    print(
+                        str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(
+                            board))
             r = self.game.getGameEnded(board, self.curPlayer)
 
             if r != 777:
