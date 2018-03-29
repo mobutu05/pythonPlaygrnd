@@ -212,6 +212,48 @@ class Board():
     def setBoardStatus(self, status):
         self.internalArray[3][3][3] = status
 
+    def display(self, current_player, invariant=1):
+        n = self.internalArray.shape[1]
+        print("   ", end="")
+        for y in range(n):
+            print(y, "", end="")
+        print("")
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+        for y in range(n):
+            print(y, "|", end="")  # print the row #
+            for x in range(n):
+                piece = self.getPosition((x, y)) * current_player * invariant  # get the piece to print
+                if piece == 1:
+                    print("X ", end="")
+                elif piece == -1:
+                    print("O ", end="")
+                else:
+                    if (y, x) in Game.validPositions:
+                        if x == n:
+                            print(".", end="")
+                        else:
+                            print(". ", end="")
+                    else:
+                        if x == 3 and y == 3 and self.getBoardStatus() != 0:
+                            if np.sign(self.getBoardStatus()) == 1:
+                                print(chr(96 + abs(self.getBoardStatus())), end=" ")
+                            else:
+                                print(chr(96 + abs(self.getBoardStatus())), end="-")
+                        elif x == n:
+                            print(" ", end="")
+                        else:
+                            print("  ", end="")
+
+            print("|")
+
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+
     def __repr__(self):
         hh = ''
         for (x, y) in Game.validPositions:
@@ -380,15 +422,16 @@ class Game():
                 pos = Game.validPositions[action]
                 board.setPosition(pos, player)
             else:  # prepare move
-                board.setBoardStatus(action + 1)
+                board.setBoardStatus((action + 1)*player)
 
-        elif board.getBoardStatus() == 100:  # capture
+        elif abs(board.getBoardStatus()) == 100:  # capture
             # make sure flag is used only once
             board.setBoardStatus(0)
             # remove piece
             pos = Game.validPositions[action]
+            assert(board.getPosition(pos) == -player)
             board.setPosition(pos, 0)
-            board.setOpponentCount(self.getOpponentCount(board) - 1)
+            board.setOpponentCount(board.getOpponentCount() - 1)
             pass
         elif board.getBoardStatus() != 0:  # move
             orig = Game.validPositions[abs(board.getBoardStatus()) - 1]
@@ -396,7 +439,7 @@ class Game():
             # make sure we start from player
             if board.getPosition(orig) != player:
                 aaa = 3
-            assert (board.getPosition(orig) == player)
+            assert (board.getPosition(orig) == player, (str(board) + " " + str(orig) + " " + str(player)))
             # make sure it's empty
             if board.getPosition(pos) != 0:
                 aaa = 3
@@ -544,48 +587,6 @@ class Game():
             result = [Game.validPositions.index(x) for x in result]
         return result
 
-    def display(self, board, current_player, invariant=1):
-        n = board.internalArray.shape[1]
-        print("   ", end="")
-        for y in range(n):
-            print(y, "", end="")
-        print("")
-        print("  ", end="")
-        for _ in range(n):
-            print("-", end="-")
-        print("--")
-        for y in range(n):
-            print(y, "|", end="")  # print the row #
-            for x in range(n):
-                piece = board.getPosition((x, y)) * current_player * invariant  # get the piece to print
-                if piece == 1:
-                    print("X ", end="")
-                elif piece == -1:
-                    print("O ", end="")
-                else:
-                    if (y, x) in Game.validPositions:
-                        if x == n:
-                            print(".", end="")
-                        else:
-                            print(". ", end="")
-                    else:
-                        if x == 3 and y == 3 and board.getBoardStatus() != 0:
-                            if np.sign(board.getBoardStatus()) == 1:
-                                print(chr(96 + abs(board.getBoardStatus())), end=" ")
-                            else:
-                                print(chr(96 + abs(board.getBoardStatus())), end="-")
-                        elif x == n:
-                            print(" ", end="")
-                        else:
-                            print("  ", end="")
-
-            print("|")
-
-        print("  ", end="")
-        for _ in range(n):
-            print("-", end="-")
-        print("--")
-
 
 class MCTS():
     """
@@ -615,12 +616,12 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.numMCTSSims):
-            print(" ")
-            print(" ")
+            # print(" ")
+            # print(" ")
             v = self.search(canonicalBoard)
             self.deep = 0
 
-        s = self.game.stringRepresentation(canonicalBoard)
+        s = str(canonicalBoard)
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
 
         if temp == 0:
@@ -658,7 +659,7 @@ class MCTS():
         if self.deep > 100:
             stop = 1
         s = str(canonicalBoard)
-        print(s)
+        # print(s)
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
         if self.Es[s] != 777:
@@ -685,7 +686,7 @@ class MCTS():
             self.Ps[s] = ps
             self.Vs[s] = validMoves
             self.Ns[s] = 0
-            print(".............................................")
+            # print("..............................")
 
             return -v[0]
 
@@ -953,7 +954,7 @@ class Coach():
         board = self.game.getInitBoard()
         self.curPlayer = 1
         episodeStep = 0
-        self.game.display(board, 1)
+        board.display(1)
         while True:
             episodeStep += 1
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
@@ -966,17 +967,16 @@ class Coach():
 
             action = np.random.choice(len(pi), p=pi)
 
-            s = self.game.stringRepresentation(canonicalBoard)
+            s = str(canonicalBoard)
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
-            print(str(episodeStep) + ": " + str(self.game.getPlayerCount(board)) + " - " + str(
-                self.game.getOpponentCount(board)))
-            if self.game.getBoardStatus(board) == 0:
-                self.game.display(board, 1)
+            board.display(1)
+            # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
+            #     board.getOpponentCount()))
+            if board.getBoardStatus() == 0:
+
                 if (s, action) in self.mcts.Qsa:
-                    print(
-                        str(episodeStep) + ": " + str(
-                            self.mcts.Qsa[(s, action)]) + " - " + self.game.stringRepresentation(
-                            board))
+                    print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+                dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
             if r != 777:
