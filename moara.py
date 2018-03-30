@@ -1017,7 +1017,7 @@ class Coach():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for eps in range(self.args.numEps):
-                    # self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
                     iterationTrainExamples += self.executeEpisode()
 
                 # save the iteration examples to the history
@@ -1057,7 +1057,7 @@ class Coach():
             # else:
             #     print('ACCEPTING NEW MODEL')
             #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
 
     def saveTrainExamples(self, iteration):
         # folder = self.args.checkpoint
@@ -1096,13 +1096,13 @@ if __name__ == "__main__":
     args = dotdict({
         'numIters': 100,
         'numEps': 1,
-        'tempThreshold': 25,
+        'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
         'numMCTSSims': 15,
         'arenaCompare': 40,
         'cpuct': 1,
-        'checkpoint': './temp/',
+        'checkpoint': '/temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 200,
@@ -1117,7 +1117,7 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    n.load_checkpoint(".", "best.neuralnet.data")
+    n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
     c = Coach(g, n, args)
     c.learn()
     print("moara")
