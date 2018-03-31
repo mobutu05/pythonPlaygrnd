@@ -136,34 +136,31 @@ class Arena():
 
 
 class Board():
-    def __init__(self):
-        # first plane - pieces
-        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr1[0][0] = 1
-        arr1[3][0] = 1
-        arr1[6][0] = 1
-        arr1[4][4] = 1
-        arr1[6][6] = 1
-        arr1[2][2] = -1
-        arr1[1][1] = -1
-        arr1[3][1] = -1
-        arr1[5][1] = -1
-        # second plane - number of pieces for player 1
-        arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr2[3][3] = 5  # player/opponent
-        # third plane - number of pieces for player 2
-        arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr3[3][3] = 4  # player/opponent
-        # fourth plane - flag is current player must capture
-        arr4 = np.array([[0 for y in range(7)] for x in range(7)])
-        arr4[3][3] = 0
-        self.internalArray = np.array([arr1, arr2, arr3, arr4])
-
-
-    def copy(self):
-        b = Board()
-        b.internalArray = np.copy(self.internalArray)
-        return b
+    def __init__(self, copy_ = None):
+        if copy_ is None:
+            # first plane - pieces
+            arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+            # arr1[0][0] = 1
+            # arr1[3][0] = 1
+            # arr1[6][0] = 1
+            # arr1[4][4] = 1
+            # arr1[6][6] = 1
+            # arr1[2][2] = -1
+            # arr1[1][1] = -1
+            # arr1[3][1] = -1
+            # arr1[5][1] = -1
+            # second plane - number of pieces for player 1
+            arr2 = np.array([[0 for y in range(7)] for x in range(7)])
+            arr2[3][3] = 9  # player/opponent
+            # third plane - number of pieces for player 2
+            arr3 = np.array([[0 for y in range(7)] for x in range(7)])
+            arr3[3][3] = 9  # player/opponent
+            # fourth plane - flag is current player must capture
+            arr4 = np.array([[0 for y in range(7)] for x in range(7)])
+            arr4[3][3] = 0
+            self.internalArray = np.array([arr1, arr2, arr3, arr4])
+        else:
+            self.internalArray = np.copy(copy_)
 
     def getCanonicalForm(self, player):
         """
@@ -180,10 +177,10 @@ class Board():
                             the colors and return the board.
         """
         if player == 1:
-            return self.copy()
+            return Board(self.internalArray)
         else:
-            b = Board()
-            b.internalArray = np.array([self.internalArray[0] * player, self.internalArray[2], self.internalArray[1], self.internalArray[3] * player])
+            b = Board(np.array([self.internalArray[0] * player, self.internalArray[2], self.internalArray[1],
+                                self.internalArray[3] * player]))
             return b
 
     def setPosition(self, pos, value):
@@ -226,6 +223,7 @@ class Board():
 
     def display(self, current_player, invariant=1):
         n = self.internalArray.shape[1]
+        print("")
         print("   ", end="")
         for y in range(n):
             print(y, "", end="")
@@ -402,7 +400,7 @@ class Game():
         #         len(self.validActions))  # move piece
         return 24 + 1  # number of positions + pass
 
-    def getNextState(self, canonicalBoard, player, action):
+    def getNextState(self, board, player, action):
         """
         Input:
             board: current board
@@ -418,10 +416,10 @@ class Game():
         # if player must make a move or capture, i.e. board status != 0,
         # the opponent takes a dummy move, nothing changes
         if action == 24:  # pass
-            return canonicalBoard, -player
+            return board, -player
 
         # action must be a valid move
-        board = canonicalBoard.copy()
+        board = Board(board.internalArray)
         pos = (3, 3)
         # phase
         # category = action // 24
@@ -441,6 +439,8 @@ class Game():
             board.setBoardStatus(0)
             # remove piece
             pos = Game.validPositions[action]
+            if board.getPosition(pos) != -player:
+                aaaa = 0
             assert(board.getPosition(pos) == -player)
             board.setPosition(pos, 0)
             board.setOpponentCount(player, board.getOpponentCount(player) - 1)
@@ -540,6 +540,7 @@ class Game():
         return list(filter(lambda x: self.isMill(board, x, player) == 1, mill_list)) != []
 
     def getLegalMoves(self, board, player):
+        board = Board(board.internalArray)
         if board.getBoardStatus() < 0:
             xxx = 0
 
@@ -618,6 +619,7 @@ class MCTS():
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
         self.Ns = {}  # stores #times board s was visited
+        self.NRs = {}  # stores #times board s was visited
         self.Ps = {}  # stores initial policy (returned by neural net)
 
         self.Es = {}  # stores game.getGameEnded ended for board s
@@ -635,9 +637,13 @@ class MCTS():
         for i in range(self.args.numMCTSSims):
             # print(" ")
             # print(" ")
+            # print(".", end="")
+            # print(".")
+            self.NRs = {} #clean counter for each run
             v = self.search(canonicalBoard)
             self.deep = 0
 
+        # print ("")
         s = str(canonicalBoard)
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
 
@@ -703,7 +709,8 @@ class MCTS():
             self.Ps[s] = ps
             self.Vs[s] = validMoves
             self.Ns[s] = 0
-            # print("..............................")
+
+            print(".", end="")
 
             return -v[0]
 
@@ -738,12 +745,22 @@ class MCTS():
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = next_board.getCanonicalForm(next_player)
-        # self.game.display(next_s,next_player, -1)
-        if self.deep > 200:
-            v = 0  # draw if too much is spent playing
+        if (self.deep > 50):
+            # next_s.display(next_player)
+            # print(f"too deep {self.deep}")
+            v = 0
+        if s not in self.NRs:
+            self.NRs[s] = 0
         else:
+            self.NRs[s] += 1
+        if self.NRs[s] < 3:
             v = self.search(next_s)
+        else:
+            v = 0  # draw if too much is spent playing
+
         self.deep -= 1
+        # if v == 0:
+        #     return 0
         if (s, a) in self.Qsa:
             self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
@@ -752,6 +769,7 @@ class MCTS():
             self.Qsa[(s, a)] = v
             self.Nsa[(s, a)] = 1
         self.Ns[s] += 1
+
         return -v
 
 
@@ -776,18 +794,18 @@ class NeuralNet():
 
         x_image = Reshape((self.board_x, self.board_y, 4))(self.input_boards)  # batch_size  x board_x x board_y x 4
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
-            Conv2D(args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
+            Conv2D(args.num_channels, 5, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
         h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
-            Conv2D(args.num_channels, 3, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 3, padding='same')(
+            Conv2D(args.num_channels, 5, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 5, padding='same')(
             h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 3, padding='valid')(
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 5, padding='valid')(
             h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv4)
         s_fc1 = Dropout(args.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
         s_fc2 = Dropout(args.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+            Activation('relu')(BatchNormalization(axis=1)(Dense(256)(s_fc1))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
@@ -852,109 +870,6 @@ class NeuralNet():
             print("No model in path '{}'".format(filepath))
 
 
-#
-# EndGames = {}  # stores game.getGameEnded ended for board s
-# initialPolicies = {}  # stores initial policy (returned by neural net)
-# ValidMoves = {}  # stores game.getValidMoves for board s
-# Ns = {}  # stores #times board s was visited
-# Qsa = {}  # stores Q values for s,a (as defined in the paper)
-# Nsa = {}  # stores #times action a was taken from state s
-#
-#
-# def MCTSearch(canonicalBoard):
-#     global deep
-#     deep += 1
-#     if deep > 100:
-#         stop = 1
-#     s = toString(canonicalBoard)
-#     if s not in EndGames:
-#         EndGames[s] = getGameEnded(canonicalBoard, 1)
-#     if EndGames[s] != 0:
-#         # terminal node
-#         return -EndGames[s]
-#
-#     if s not in initialPolicies:
-#         # leaf node
-#         initialPolicies[s], v = predict(canonicalBoard)
-#         valids = getValidMoves(canonicalBoard, 1)
-#         initialPolicies[s] = initialPolicies[s] * valids  # masking invalid moves
-#
-#         sum = np.sum(initialPolicies[s])
-#         if sum > 0:
-#             initialPolicies[s] /= sum  # renormalize
-#         else:
-#             # if all valid moves were masked make all valid moves equally probable
-#
-#             # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
-#             # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.
-#             print("All valid moves were masked, do workaround.")
-#             initialPolicies[s] = initialPolicies[s] + valids
-#             initialPolicies[s] /= np.sum(initialPolicies[s][s])
-#
-#         ValidMoves[s] = valids
-#         Ns[s] = 0
-#         return -v
-#     # if initial policy already evaluated
-#     valids = ValidMoves[s]
-#     cur_best = -float('inf')
-#     best_act = []
-#
-#     # pick the action with the highest upper confidence bound
-#     cpuct = 1
-#     EPS = 1e-8
-#     for a in filter(lambda a: valids[a] == 1, range(getActionSize())):
-#         if (s, a) in Qsa:
-#             u = Qsa[(s, a)] + cpuct * initialPolicies[s][a] * math.sqrt(Ns[s]) / (1 + Nsa[(s, a)])
-#         else:
-#             u = cpuct * initialPolicies[s][a] * math.sqrt(Ns[s] + EPS)  # Q = 0 ?
-#
-#         if u > cur_best:
-#             cur_best = u
-#             best_act = [a]
-#         elif u == cur_best:
-#             best_act.append(a)
-#
-#     a = np.random.choice(best_act)
-#     # a = best_act
-#     next_s, next_player = getNextState(canonicalBoard, 1, a)
-#     next_s = getCanonicalForm(next_s, next_player)
-#
-#     v = MCTSearch(next_s)
-#
-#     deep -= 1
-#     if (s, a) in Qsa:
-#         Qsa[(s, a)] = (Nsa[(s, a)] * Qsa[(s, a)] + v) / (Nsa[(s, a)] + 1)
-#         Nsa[(s, a)] += 1
-#
-#     else:
-#         Qsa[(s, a)] = v
-#         Nsa[(s, a)] = 1
-#
-#     Ns[s] += 1
-#     return -v
-#
-#
-# def getActionProb(canonicalBoard, temp=1):
-#     global deep
-#     for i in range(10):  # no of montecarlo simulations
-#         MCTSearch(canonicalBoard)
-#         deep -= 1
-#     s = toString(canonicalBoard)
-#     counts = [Nsa[(s, a)] if (s, a) in Nsa else 0 for a in range(getActionSize())]
-#
-#     if temp == 0:
-#         bestA = np.argmax(counts)
-#         probs = [0] * len(counts)
-#         probs[bestA] = 1
-#         return probs
-#
-#     counts = [x ** (1. / temp) for x in counts]
-#     probs = [x / float(sum(counts)) for x in counts]
-#     return probs
-
-
-# one episode of self-play
-
 class Coach():
     def __init__(self, game, nnet, args):
         self.game = game
@@ -992,10 +907,13 @@ class Coach():
             if board.getBoardStatus() == 0:
                 board.display(1)
                 if (s, action) in self.mcts.Qsa:
-                    print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+                    # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:5.2} - {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
+            if episodeStep > 300:
+                r = 0
             if r != 777:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
@@ -1099,10 +1017,10 @@ if __name__ == "__main__":
         'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 15,
+        'numMCTSSims': 35,
         'arenaCompare': 40,
         'cpuct': 1,
-        'checkpoint': '/temp/',
+        'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 200,
@@ -1110,9 +1028,9 @@ if __name__ == "__main__":
         'lr': 0.001,
         'dropout': 0.3,
         'epochs': 10,
-        'batch_size': 64,
+        'batch_size': 8,
         'cuda': True,
-        'num_channels': 512,
+        'num_channels': 64,
 
     })
     g = Game()
