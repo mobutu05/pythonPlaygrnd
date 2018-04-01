@@ -140,21 +140,21 @@ class Board():
         if copy_ is None:
             # first plane - pieces
             arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-            # arr1[0][0] = 1
-            # arr1[3][0] = 1
-            # arr1[6][0] = 1
-            # arr1[4][4] = 1
-            # arr1[6][6] = 1
-            # arr1[2][2] = -1
-            # arr1[1][1] = -1
-            # arr1[3][1] = -1
-            # arr1[5][1] = -1
+            arr1[0][0] = 1
+            arr1[3][0] = 1
+            arr1[6][0] = 1
+            arr1[4][4] = 1
+            arr1[6][6] = 1
+            arr1[2][2] = -1
+            arr1[1][1] = -1
+            arr1[3][1] = -1
+            arr1[5][1] = -1
             # second plane - number of pieces for player 1
             arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr2[3][3] = 9  # player/opponent
+            arr2[3][3] = 5  # player/opponent
             # third plane - number of pieces for player 2
             arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr3[3][3] = 9  # player/opponent
+            arr3[3][3] = 4  # player/opponent
             # fourth plane - flag is current player must capture
             arr4 = np.array([[0 for y in range(7)] for x in range(7)])
             arr4[3][3] = 0
@@ -392,13 +392,13 @@ class Game():
         Returns:
             actionSize: number of all possible actions
         """
-        # return (24 +  # fly 1st piece
+        return (24 + # fly 1st piece
         #         24 +  # fly 2nd piece
         #         24 +  # fly 3rd piece
         #         24 +  # put piece
         #         24 +  # capture piece
-        #         len(self.validActions))  # move piece
-        return 24 + 1  # number of positions + pass
+            len(self.validActions) + # move piece
+            1)    #pass
 
     def getNextState(self, board, player, action):
         """
@@ -415,7 +415,7 @@ class Game():
 
         # if player must make a move or capture, i.e. board status != 0,
         # the opponent takes a dummy move, nothing changes
-        if action == 24:  # pass
+        if action == 24 + len(Game.validActions):  # pass
             return board, -player
 
         # action must be a valid move
@@ -432,8 +432,12 @@ class Game():
                 pos = Game.validPositions[action]
                 board.setPosition(pos, player)
             else:  # prepare move
-                board.setBoardStatus((action + 1)*player)
-
+                # board.setBoardStatus((action + 1)*player)
+                move = Game.validActions[action - 24]
+                pos = move[0]  # from
+                board.setPosition(pos, 0)
+                pos = move[1]  # to
+                board.setPosition(pos, player)
         elif abs(board.getBoardStatus()) == 100:  # capture
             # make sure flag is used only once
             board.setBoardStatus(0)
@@ -540,19 +544,20 @@ class Game():
         return list(filter(lambda x: self.isMill(board, x, player) == 1, mill_list)) != []
 
     def getLegalMoves(self, board, player):
-        board = Board(board.internalArray)
-        if board.getBoardStatus() < 0:
+        # board = Board(board.internalArray)
+        boardStatus = board.getBoardStatus()
+        if boardStatus < 0:
             xxx = 0
 
         # opposite player passes
-        if board.getBoardStatus() != 0 and np.sign(board.getBoardStatus()) != np.sign(player):
-            return [24]  # pass
+        if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
+            return [24 + len(Game.validActions)]  # pass
 
         # only if the last move results in a mill
         # if the player has a mill, it must remove an opponent's piece, that is not a mill either
         # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
         # need to select an opponent piece
-        if board.getBoardStatus() == 100 and player == 1:
+        if boardStatus == 100 * player:
             available_opponent_pieces = list(
                 filter(lambda x: board.getPosition(x) == -player, Game.validPositions))
             result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
@@ -561,7 +566,8 @@ class Game():
                 return result  # else choose another move
             else:
                 print("can't capture")
-                board.setBoardStatus(0)
+                # board.setBoardStatus(0)
+                boardStatus = 0
         # move piece, select destination, phase 2 or 3
 
 
@@ -572,15 +578,19 @@ class Game():
 
         player_no = board.getPlayerCount(player)
 
-        if board.getBoardStatus() != 0 and player == 1:
+        if boardStatus != 0 and player == 1:
             # select those actions that originate in the stored position
 
-            if player_no > 3:
-                (x, y) = Game.validPositions[board.getBoardStatus() - 1]
-                result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
-                result = [x[1] for x in result if board.getPosition(x[1]) == 0]
-                result = set(result)
-                result = [Game.validPositions.index(x) for x in result]
+            if player_no > 3: #move
+                # (x, y) = Game.validPositions[boardStatus - 1]
+                # result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
+                # result = [x[1] for x in result if board.getPosition(x[1]) == 0]
+                # result = set(result)
+                # result = [Game.validPositions.index(x) for x in result]
+                result = list(filter(lambda x: board.getPosition(x[0]) == player and
+                                               board.getPosition(x[1]) == 0,
+                                     Game.validActions))
+                result = [24 + Game.validPositions.index(x) for x in result]
             if player_no == 3:
                 # any empty place
                 result = list(filter(lambda x: board.getPosition(x) == 0, Game.validPositions))
@@ -596,9 +606,9 @@ class Game():
             # select all transitions that have a player piece in the first position and an empty one in the second position
             result = list(filter(lambda x: board.getPosition(x[0]) == player and
                                            board.getPosition(x[1]) == 0, Game.validActions))
-            result = [x[0] for x in result]
-            result = set(result)
-            result = [Game.validPositions.index(x) for x in result]
+            # result = [x[0] for x in result]
+            # result = set(result)
+            result = [24 + Game.validActions.index(x) for x in result]
         elif player_no == 3:
             # phase 3: when only 3 pieces left can move anywhere empty
             result = list(filter(lambda x: board.getPosition(x) == player, Game.validPositions))
@@ -693,6 +703,8 @@ class MCTS():
             # leaf node
 
             ps, v = self.nnet.predict(canonicalBoard)
+            # ps =np.array([1.0 for x in range(self.game.getActionSize())])
+            # v = [0]
             validMoves = self.game.getValidMoves(canonicalBoard, 1)
             ps = ps * validMoves  # masking invalid moves
             sum_Ps_s = np.sum(ps)
@@ -1035,7 +1047,7 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
+    # n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
     c = Coach(g, n, args)
     c.learn()
     print("moara")
