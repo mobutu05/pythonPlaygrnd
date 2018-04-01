@@ -649,7 +649,7 @@ class MCTS():
             # print(" ")
             # print(".", end="")
             # print(".")
-            self.NRs = {} #clean counter for each run
+
             v = self.search(canonicalBoard)
             self.deep = 0
 
@@ -761,14 +761,16 @@ class MCTS():
             # next_s.display(next_player)
             # print(f"too deep {self.deep}")
             v = 0
+        else:
+            v = self.search(next_s)
         if s not in self.NRs:
             self.NRs[s] = 0
         else:
             self.NRs[s] += 1
-        if self.NRs[s] < 3:
-            v = self.search(next_s)
-        else:
-            v = 0  # draw if too much is spent playing
+        # if self.NRs[s] < 3:
+        # v = self.search(next_s)
+        # else:
+        #     v = 0  # draw if too much is spent playing
 
         self.deep -= 1
         # if v == 0:
@@ -904,6 +906,7 @@ class Coach():
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
             # temp = 1
+            self.mcts.NRs = {}  # clean counter for each run
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
@@ -920,11 +923,11 @@ class Coach():
                 board.display(1)
                 if (s, action) in self.mcts.Qsa:
                     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:5.2} - {board}")
+                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]} - {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
-            if episodeStep > 300:
+            if episodeStep > 3000:
                 r = 0
             if r != 777:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
@@ -1047,7 +1050,7 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    # n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
+    n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
     c = Coach(g, n, args)
     c.learn()
     print("moara")
