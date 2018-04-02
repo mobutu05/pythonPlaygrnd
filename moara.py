@@ -421,26 +421,53 @@ class Game():
         # action must be a valid move
         board = Board(board.internalArray)
         pos = (3, 3)
-        # phase
-        # category = action // 24
+        pieces_on_board = len([0 for pos in Game.validPositions if board.getPosition(pos) == player])
+        player_no = board.getPlayerCount(player)
+
+        #pre-selection for capture
+        if abs(board.getBoardStatus()) == 100:  # capture
+            #could not capture, but can move
+            if action >= 24:
+                board.setBoardStatus(0)
+            #could not capture, but can jump
+            else:
+                move = Game.validPositions[action]
+                if board.getPosition(move) != -player:
+                    board.display(player)
+                    board.setBoardStatus(0)
+
 
         # phase 1
         if board.getBoardStatus() == 0:  # select/put piece
-            pieces_on_board = len([0 for pos in Game.validPositions if board.getPosition(pos) == player])
-            player_no = board.getPlayerCount(player)
+
             if player_no > pieces_on_board:  # put
                 pos = Game.validPositions[action]
                 board.setPosition(pos, player)
             else:  # prepare move
-                # board.setBoardStatus((action + 1)*player)
-                move = Game.validActions[action - 24]
-                pos = move[0]  # from
-                board.setPosition(pos, 0)
-                pos = move[1]  # to
-                board.setPosition(pos, player)
+
+                if player_no > 3:
+                    move = Game.validActions[action - 24]
+                    pos = move[0]  # from
+                    if board.getPosition(pos) != player:
+                        board.display(player)
+                        aaa = 0
+                    assert (board.getPosition(pos) == player)
+                    board.setPosition(pos, 0)
+                    pos = move[1]  # to
+                    if board.getPosition(pos) != 0:
+                        board.display(player)
+                        aaa = 0
+                    assert (board.getPosition(pos) == 0)
+                    board.setPosition(pos, player)
+                elif player_no == 3:
+                    orig = Game.validPositions[action]
+                    assert (board.getPosition(orig) == player)
+                    board.setBoardStatus((action + 1)*player)
+                else:
+                    assert(False)
         elif abs(board.getBoardStatus()) == 100:  # capture
             # make sure flag is used only once
-            board.setBoardStatus(0)
+            # double check
             # remove piece
             pos = Game.validPositions[action]
             if board.getPosition(pos) != -player:
@@ -448,6 +475,9 @@ class Game():
             assert(board.getPosition(pos) == -player)
             board.setPosition(pos, 0)
             board.setOpponentCount(player, board.getOpponentCount(player) - 1)
+
+
+            board.setBoardStatus(0)
             pass
         elif board.getBoardStatus() != 0:  # move
             orig = Game.validPositions[abs(board.getBoardStatus()) - 1]
@@ -971,11 +1001,12 @@ class Coach():
             shuffle(trainExamples)
 
             # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+
             # self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # pmcts = MCTS(self.game, self.pnet, self.args)
 
             self.nnet.train(trainExamples)
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
