@@ -221,7 +221,7 @@ class Board():
     def setBoardStatus(self, status):
         self.internalArray[3][3][3] = status
 
-    def display(self, current_player, invariant=1):
+    def display(self, current_player, mcts = None, invariant=1):
         n = self.internalArray.shape[1]
         print("")
         print("   ", end="")
@@ -242,10 +242,16 @@ class Board():
                     print("O ", end="")
                 else:
                     if (y, x) in Game.validPositions:
+                        # if (str(self), Game.validPositions.index((y, x))) in mcts.Qsa:
                         if x == n:
                             print(".", end="")
                         else:
                             print(". ", end="")
+                        # else:
+                        #     if x == n:
+                        #         print("!", end="")
+                        #     else:
+                        #         print("! ", end="")
                     else:
                         if x == 3 and y == 3 and self.getBoardStatus() != 0:
                             if np.sign(self.getBoardStatus()) == 1:
@@ -752,7 +758,7 @@ class MCTS():
             self.Vs[s] = validMoves
             self.Ns[s] = 0
 
-            print(".", end="")
+            print(".", end=" ")
 
             return -v[0]
 
@@ -760,43 +766,44 @@ class MCTS():
         cur_best = -float('inf')
         best_act = -1
         # best_act = []
-        # # pick the action with the highest upper confidence bound
-        # for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
-        #     if (s, a) in self.Qsa:
-        #         u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-        #             1 + self.Nsa[(s, a)])
-        #     else:
-        #         u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
-        #
-        #     if u > cur_best:
-        #         cur_best = u
-        #         best_act = [a]
-        #     elif u == cur_best:
-        #         best_act.append(a)
-        # a = np.random.choice(best_act)
+        # pick the action with the highest upper confidence bound
+        for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
+            if (s, a) in self.Qsa:
+                u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
+                    1 + self.Nsa[(s, a)])
+            else:
+                u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
 
-        valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
-        u_values = [
-            (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])) if (s,
-                                                                                                                      a) in self.Qsa
-            else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-        # get action with the best ucb
-        best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values),
-                                     (best_act, cur_best))
-        a = best_pair[0]
+            if u > cur_best:
+                cur_best = u
+                best_act = a
+            # elif u == cur_best:
+            #     best_act.append(a)
+        a = best_act #  np.random.choice(best_act)
+
+        # valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
+        # u_values = [
+        #     (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])) if (s,
+        #                                                                                                               a) in self.Qsa
+        #     else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
+        # # get action with the best ucb
+        # best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values),
+        #                              (best_act, cur_best))
+        # a = best_pair[0]
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = next_board.getCanonicalForm(next_player)
-        if (self.deep > 50):
+        if (self.deep > 200):
             # next_s.display(next_player)
             # print(f"too deep {self.deep}")
             v = 0
+            # self.Qsa[(s, a)] = 0
         else:
             v = self.search(next_s)
-        if s not in self.NRs:
-            self.NRs[s] = 0
-        else:
-            self.NRs[s] += 1
+        # if s not in self.NRs:
+        #     self.NRs[s] = 0
+        # else:
+        #     self.NRs[s] += 1
         # if self.NRs[s] < 3:
         # v = self.search(next_s)
         # else:
@@ -806,14 +813,25 @@ class MCTS():
         # if v == 0:
         #     return 0
         if (s, a) in self.Qsa:
+
+            # if v == 0:
+            #     # self.Qsa[(s, a)] = 0
+            #     #self.Nsa[(s, a)] -= 1
+            #     pass
+            # else:
             self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
 
         else:
             self.Qsa[(s, a)] = v
             self.Nsa[(s, a)] = 1
-        self.Ns[s] += 1
+            # if v == 0:
+            #     self.Ns[s] += 1
 
+        # if v != 0:
+        self.Ns[s] += 1
+        # elif self.Ns[s] > 0:
+        #     self.Ns[s] -= 1
         return -v
 
 
@@ -930,7 +948,7 @@ class Coach():
         board = self.game.getInitBoard()
         self.curPlayer = 1
         episodeStep = 0
-        board.display(1)
+        board.display(1, self.mcts)
         while True:
             episodeStep += 1
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
@@ -950,7 +968,7 @@ class Coach():
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
             if board.getBoardStatus() == 0:
-                board.display(1)
+                board.display(1, self.mcts)
                 if (s, action) in self.mcts.Qsa:
                     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
                     print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]} - {board}")
@@ -1063,7 +1081,7 @@ if __name__ == "__main__":
         'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 35,
+        'numMCTSSims': 5,
         'arenaCompare': 40,
         'cpuct': 1,
         'checkpoint': './temp/',
