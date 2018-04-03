@@ -801,11 +801,13 @@ class MCTS():
             # next_s.display(next_player)
             # print(f"too deep {self.deep}")
             v = 0
+            # self.Ps[s][a] /= 2
             # self.Qsa[(s, a)] = 0
         elif self.NRs[s] < 2:
             v = self.search(next_s)
         else:
             v = 0 # self.Qsa[(s,a)]
+            # self.Ps[s][a] /= 2
 
         # if self.NRs[s] < 3:
         # v = self.search(next_s)
@@ -818,7 +820,6 @@ class MCTS():
 
         if self.NRs[s] < 2:
             if (s, a) in self.Qsa:
-
                 # if v == 0:
                 #     # self.Qsa[(s, a)] = 0
                 #     #self.Nsa[(s, a)] -= 1
@@ -978,12 +979,20 @@ class Coach():
 
             if NRs[(s, action)] < 3:
                 board = new_board
-                self.curPlayer = new_Player;
+                self.curPlayer = new_Player
             else:
-                self.mcts.Qsa[(s, action)] = 0
-                if self.mcts.Nsa[(s, action)] > 1:
-                    self.mcts.Nsa[(s, action)] -= 1
-                a = 4
+                # self.mcts.Qsa[(s, action)] = 0
+                # self.mcts.Nsa[(s, action)] = self.mcts.Nsa[(s, action)] // 2
+                # if self.curPlayer == 1:
+                    #towards 0
+                # self.mcts.Ps[s][action] /= 2
+                # else:
+                #     #towards 1
+                #     self.mcts.Ps[s][action] = math.sqrt(self.mcts.Ps[s][action])
+                r = 0
+                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples] #abort this episode
+
+
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
             if board.getBoardStatus() == 0:
@@ -1018,7 +1027,9 @@ class Coach():
 
                 for eps in range(self.args.numEps):
                     self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
-                    iterationTrainExamples += self.executeEpisode()
+                    example = self.executeEpisode()
+                    if example != []:
+                        iterationTrainExamples += example
 
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
