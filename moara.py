@@ -151,10 +151,10 @@ class Board():
             arr1[5][1] = -1
             # second plane - number of pieces for player 1
             arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr2[3][3] = 5  # player/opponent
+            arr2[3][3] = 9  # player/opponent
             # third plane - number of pieces for player 2
             arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr3[3][3] = 4  # player/opponent
+            arr3[3][3] = 9  # player/opponent
             # fourth plane - flag is current player must capture
             arr4 = np.array([[0 for y in range(7)] for x in range(7)])
             arr4[3][3] = 0
@@ -685,7 +685,7 @@ class MCTS():
             # print(" ")
             # print(".", end="")
             # print(".")
-            NRs = {}  # clean counter for each run
+            self.NRs = {}  # clean counter for each run
             v = self.search(canonicalBoard)
             self.deep = 0
 
@@ -767,43 +767,46 @@ class MCTS():
         best_act = -1
         # best_act = []
         # pick the action with the highest upper confidence bound
-        for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
-            if (s, a) in self.Qsa:
-                u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-                    1 + self.Nsa[(s, a)])
-            else:
-                u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+        # for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
+        #     if (s, a) in self.Qsa:
+        #         u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
+        #             1 + self.Nsa[(s, a)])
+        #     else:
+        #         u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+        #
+        #     if u > cur_best:
+        #         cur_best = u
+        #         best_act = a
+        #     # elif u == cur_best:
+        #     #     best_act.append(a)
+        # a = best_act #  np.random.choice(best_act)
 
-            if u > cur_best:
-                cur_best = u
-                best_act = a
-            # elif u == cur_best:
-            #     best_act.append(a)
-        a = best_act #  np.random.choice(best_act)
-
-        # valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
-        # u_values = [
-        #     (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])) if (s,
-        #                                                                                                               a) in self.Qsa
-        #     else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-        # # get action with the best ucb
-        # best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values),
-        #                              (best_act, cur_best))
-        # a = best_pair[0]
+        valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
+        u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
+                        if (s,a) in self.Qsa
+                        else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
+        # get action with the best ucb
+        best_pair = functools.reduce(lambda acc, pair: pair
+                        if pair[1] > acc[1] else acc, zip(valid_actions, u_values),(best_act, cur_best))
+        a = best_pair[0]
 
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = next_board.getCanonicalForm(next_player)
+
+        if s not in self.NRs:
+            self.NRs[s] = 0
+        else:
+            self.NRs[s] += 1
         if (self.deep > 200):
             # next_s.display(next_player)
             # print(f"too deep {self.deep}")
             v = 0
             # self.Qsa[(s, a)] = 0
-        else:
+        elif self.NRs[s] < 2:
             v = self.search(next_s)
-        if s not in self.NRs:
-            self.NRs[s] = 0
         else:
-            self.NRs[s] += 1
+            v = 0 # self.Qsa[(s,a)]
+
         # if self.NRs[s] < 3:
         # v = self.search(next_s)
         # else:
@@ -812,26 +815,28 @@ class MCTS():
         self.deep -= 1
         # if v == 0:
         #     return 0
-        if (s, a) in self.Qsa:
 
-            # if v == 0:
-            #     # self.Qsa[(s, a)] = 0
-            #     #self.Nsa[(s, a)] -= 1
-            #     pass
-            # else:
-            self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
-            self.Nsa[(s, a)] += 1
+        if self.NRs[s] < 2:
+            if (s, a) in self.Qsa:
 
-        else:
-            self.Qsa[(s, a)] = v
-            self.Nsa[(s, a)] = 1
-            # if v == 0:
-            #     self.Ns[s] += 1
+                # if v == 0:
+                #     # self.Qsa[(s, a)] = 0
+                #     #self.Nsa[(s, a)] -= 1
+                #     pass
+                # else:
+                self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
+                self.Nsa[(s, a)] += 1
 
-        # if v != 0:
-        self.Ns[s] += 1
-        # elif self.Ns[s] > 0:
-        #     self.Ns[s] -= 1
+            else:
+                self.Qsa[(s, a)] = v
+                self.Nsa[(s, a)] = 1
+                # if v == 0:
+                #     self.Ns[s] += 1
+
+            # if v != 0:
+            self.Ns[s] += 1
+            # elif self.Ns[s] > 0:
+            #     self.Ns[s] -= 1
         return -v
 
 
@@ -949,6 +954,7 @@ class Coach():
         self.curPlayer = 1
         episodeStep = 0
         board.display(1, self.mcts)
+        NRs = {}
         while True:
             episodeStep += 1
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
@@ -963,8 +969,21 @@ class Coach():
             action = np.random.choice(len(pi), p=pi)
 
             s = str(canonicalBoard)
-            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
 
+            new_board, new_Player = self.game.getNextState(board, self.curPlayer, action)
+            if (s, action) not in NRs:
+                NRs[(s, action)] = 0
+            else:
+                NRs[(s, action)] += 1
+
+            if NRs[(s, action)] < 3:
+                board = new_board
+                self.curPlayer = new_Player;
+            else:
+                self.mcts.Qsa[(s, action)] = 0
+                if self.mcts.Nsa[(s, action)] > 1:
+                    self.mcts.Nsa[(s, action)] -= 1
+                a = 4
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
             if board.getBoardStatus() == 0:
@@ -975,8 +994,8 @@ class Coach():
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
-            if episodeStep > 3000:
-                r = 0
+            # if episodeStep > 3000:
+            #     r = 0
             if r != 777:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
