@@ -685,7 +685,7 @@ class MCTS():
             # print(" ")
             # print(".", end="")
             # print(".")
-
+            NRs = {}  # clean counter for each run
             v = self.search(canonicalBoard)
             self.deep = 0
 
@@ -800,10 +800,10 @@ class MCTS():
             # self.Qsa[(s, a)] = 0
         else:
             v = self.search(next_s)
-        # if s not in self.NRs:
-        #     self.NRs[s] = 0
-        # else:
-        #     self.NRs[s] += 1
+        if s not in self.NRs:
+            self.NRs[s] = 0
+        else:
+            self.NRs[s] += 1
         # if self.NRs[s] < 3:
         # v = self.search(next_s)
         # else:
@@ -954,7 +954,7 @@ class Coach():
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
             # temp = 1
-            self.mcts.NRs = {}  # clean counter for each run
+
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
