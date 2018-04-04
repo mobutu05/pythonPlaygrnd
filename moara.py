@@ -1010,7 +1010,8 @@ class Coach():
                 #     #towards 1
                 #     self.mcts.Ps[s][action] = math.sqrt(self.mcts.Ps[s][action])
                 r = 0
-                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples] #abort this episode
+                # return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples] #abort this episode
+                return []
 
 
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
@@ -1073,8 +1074,9 @@ class Coach():
             # self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # pmcts = MCTS(self.game, self.pnet, self.args)
 
-            self.nnet.train(trainExamples)
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+            if trainExamples != []:
+                self.nnet.train(trainExamples)
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
