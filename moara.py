@@ -19,7 +19,7 @@ class Arena():
     An Arena class where any 2 agents can be pit against each other.
     """
 
-    def __init__(self, player1, player2, game, display=None):
+    def __init__(self, player1, player2, game, args, mcts, display=None):
         """
         Input:
             player 1,2: two functions that takes board as input, return action
@@ -35,6 +35,8 @@ class Arena():
         self.player2 = player2
         self.game = game
         self.display = display
+        self.args = args
+        self.mcts = mcts
 
     def playGame(self, verbose=False):
         """
@@ -50,25 +52,41 @@ class Arena():
         curPlayer = 1
         board = self.game.getInitBoard()
         it = 0
-        while self.game.getGameEnded(board, curPlayer) == 0:
+        trainExamples = []
+        r = 777
+        while r == 777:
             it += 1
             if verbose:
-                assert (self.display)
                 print("Turn ", str(it), "Player ", str(curPlayer))
-                self.display(board)
-            action = players[curPlayer + 1](self.game.getCanonicalForm(board, curPlayer))
+                board.display(1)
+            canonicalBoard = board.getCanonicalForm(curPlayer)
+            action = players[curPlayer + 1](canonicalBoard)
 
-            valids = self.game.getValidMoves(self.game.getCanonicalForm(board, curPlayer), 1)
+            valids = self.game.getValidMoves(canonicalBoard, 1)
 
             if valids[action] == 0:
                 print(action)
                 assert valids[action] > 0
+            p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
+            trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
             board, curPlayer = self.game.getNextState(board, curPlayer, action)
+            if (str(canonicalBoard), action) in self.mcts.Qsa:
+                # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+                print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]} - {board}")
+            if action < 24:
+                print(f"move: {Game.validPositions[action]}")
+            elif action < 88:
+                print(f"move: {Game.validActions[action - 24]}")
+            else:
+                print(f"move: PASS")
+            r = self.game.getGameEnded(board, 1)
+
         if verbose:
-            assert (self.display)
-            print("Game over: Turn ", str(it), "Result ", str(self.game.getGameEnded(board, 1)))
-            self.display(board)
-        return self.game.getGameEnded(board, 1)
+
+            print("Game over: Turn ", str(it), "Result ", str(r))
+            board.display(curPlayer)
+        self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
+        return r
 
     def playGames(self, num, verbose=False):
         """
@@ -80,9 +98,8 @@ class Arena():
             twoWon: games won by player2
             draws:  games won by nobody
         """
-        eps_time = AverageMeter()
-        bar = Bar('Arena.playGames', max=num)
-        end = time.time()
+        self.trainExamplesHistory = []
+
         eps = 0
         maxeps = int(num)
 
@@ -91,6 +108,7 @@ class Arena():
         twoWon = 0
         draws = 0
         for _ in range(num):
+            self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
                 oneWon += 1
@@ -100,14 +118,11 @@ class Arena():
                 draws += 1
             # bookkeeping + plot progress
             eps += 1
-            eps_time.update(time.time() - end)
-            end = time.time()
-            bar.suffix = '({eps}/{maxeps}) Eps Time: {et:.3f}s | Total: {total:} | ETA: {eta:}'.format(eps=eps + 1,
-                                                                                                       maxeps=maxeps,
-                                                                                                       et=eps_time.avg,
-                                                                                                       total=bar.elapsed_td,
-                                                                                                       eta=bar.eta_td)
-            bar.next()
+            self.trainExamplesHistory.append(self.iterationTrainExamples)
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
 
         self.player1, self.player2 = self.player2, self.player1
 
@@ -120,17 +135,16 @@ class Arena():
             else:
                 draws += 1
             # bookkeeping + plot progress
-            eps += 1
-            eps_time.update(time.time() - end)
-            end = time.time()
-            bar.suffix = '({eps}/{maxeps}) Eps Time: {et:.3f}s | Total: {total:} | ETA: {eta:}'.format(eps=eps + 1,
-                                                                                                       maxeps=num,
-                                                                                                       et=eps_time.avg,
-                                                                                                       total=bar.elapsed_td,
-                                                                                                       eta=bar.eta_td)
-            bar.next()
 
-        bar.finish()
+
+            self.trainExamplesHistory.append(self.iterationTrainExamples)
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
+
+
+
 
         return oneWon, twoWon, draws
 
@@ -140,15 +154,15 @@ class Board():
         if copy_ is None:
             # first plane - pieces
             arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr1[0][0] = 1
-            arr1[3][0] = 1
-            arr1[6][0] = 1
-            arr1[4][4] = 1
-            arr1[6][6] = 1
-            arr1[2][2] = -1
-            arr1[1][1] = -1
-            arr1[3][1] = -1
-            arr1[5][1] = -1
+            # arr1[0][0] = 1
+            # arr1[3][0] = 1
+            # arr1[6][0] = 1
+            # arr1[4][4] = 1
+            # arr1[6][6] = 1
+            # arr1[2][2] = -1
+            # arr1[1][1] = -1
+            # arr1[3][1] = -1
+            # arr1[5][1] = -1
             # second plane - number of pieces for player 1
             arr2 = np.array([[0 for y in range(7)] for x in range(7)])
             arr2[3][3] = 9  # player/opponent
@@ -1069,7 +1083,7 @@ class Coach():
             # else:
             #     print('ACCEPTING NEW MODEL')
             #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+            # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
 
     def saveTrainExamples(self, iteration):
         # folder = self.args.checkpoint
@@ -1102,6 +1116,47 @@ class Coach():
 class dotdict(dict):
     def __getattr__(self, name):
         return self[name]
+class HumanPlayer():
+    def __init__(self, game):
+        self.game = game
+
+    def play(self, board):
+        # display(board)
+        valid = self.game.getValidMoves(board, 1)
+
+        #if pass is required
+        if valid[88] == 1:
+            return 88
+        # for i in range(len(valid)):
+        #     if valid[i]:
+        #         print(int(i/self.game.n), int(i%self.game.n))
+        while True:
+            input_string = input()
+            try:
+                input_array = [int(x) for x in input_string.split(' ')]
+            except:
+                input_array = []
+            if len(input_array) == 2:
+                a, b = input_array
+                try:
+                    move = Game.validPositions.index((a,b))
+                except:
+                    move = 90
+            elif len(input_array) == 4:
+                a, b, c, d = input_array
+                try:
+                    move = 24 + Game.validActions.index(((a, b),(c,d)))
+                except:
+                    move = 90
+            else:
+                move = 90 #invalid
+
+            if move <= 88 and valid[move]:
+                break
+            else:
+                print('Invalid')
+
+        return move
 
 
 if __name__ == "__main__":
@@ -1130,6 +1185,23 @@ if __name__ == "__main__":
     g = Game()
     n = NeuralNet(g, args)
     n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
+
+    #play
+    #function
+    # hp = HumanPlayer(g).play
+    # mcts = MCTS(g,n, args)
+    # neural = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+    # a = Arena(neural, hp, g, args, mcts)
+    # print(a.playGames(2, verbose=True))
+    # trainExamples = []
+    # for e in a.trainExamplesHistory:
+    #     trainExamples.extend(e)
+    # for _ in range(args.numIters):
+    #     shuffle(trainExamples)
+    #     n.train(trainExamples)
+    #     n.save_checkpoint(folder= args.checkpoint, filename='temp.neuralnet.data')
+
+    #train
     c = Coach(g, n, args)
     c.learn()
     print("moara")
