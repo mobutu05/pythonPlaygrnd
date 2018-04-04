@@ -739,9 +739,15 @@ class MCTS():
         # self.game.display(canonicalBoard, 1)
         # print (self.deep)
         self.deep += 1
-        if self.deep > 100:
-            stop = 1
+        if self.deep > 50:
+            return  0
         s = str(canonicalBoard)
+        # if s not in self.NRs:
+        #     self.NRs[s] = 0
+        # else:
+        #     self.NRs[s] += 1
+        # if self.NRs[s] > 3:
+        #     return 0
         # print(s)
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
@@ -807,21 +813,21 @@ class MCTS():
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = next_board.getCanonicalForm(next_player)
 
-        if s not in self.NRs:
-            self.NRs[s] = 0
-        else:
-            self.NRs[s] += 1
-        if (self.deep > 200):
-            # next_s.display(next_player)
-            # print(f"too deep {self.deep}")
-            v = 0
-            # self.Ps[s][a] /= 2
-            # self.Qsa[(s, a)] = 0
-        elif self.NRs[s] < 2:
-            v = self.search(next_s)
-        else:
-            v = 0 # self.Qsa[(s,a)]
-            # self.Ps[s][a] /= 2
+        # if s not in self.NRs:
+        #     self.NRs[s] = 0
+        # else:
+        #     self.NRs[s] += 1
+        # if (self.deep > 200):
+        #     # next_s.display(next_player)
+        #     # print(f"too deep {self.deep}")
+        #     v = 0
+        #     # self.Ps[s][a] /= 2
+        #     # self.Qsa[(s, a)] = 0
+        # elif self.NRs[s] < 2:
+        v = self.search(next_s)
+        # else:
+        #     v = 0 # self.Qsa[(s,a)]
+        #     # self.Ps[s][a] /= 2
 
         # if self.NRs[s] < 3:
         # v = self.search(next_s)
@@ -832,26 +838,26 @@ class MCTS():
         # if v == 0:
         #     return 0
 
-        if self.NRs[s] < 2:
-            if (s, a) in self.Qsa:
-                # if v == 0:
-                #     # self.Qsa[(s, a)] = 0
-                #     #self.Nsa[(s, a)] -= 1
-                #     pass
-                # else:
-                self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
-                self.Nsa[(s, a)] += 1
+        # if self.NRs[s] < 2:
+        if (s, a) in self.Qsa:
+            # if v == 0:
+            #     # self.Qsa[(s, a)] = 0
+            #     #self.Nsa[(s, a)] -= 1
+            #     pass
+            # else:
+            self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
+            self.Nsa[(s, a)] += 1
 
-            else:
-                self.Qsa[(s, a)] = v
-                self.Nsa[(s, a)] = 1
-                # if v == 0:
-                #     self.Ns[s] += 1
+        else:
+            self.Qsa[(s, a)] = v
+            self.Nsa[(s, a)] = 1
+            # if v == 0:
+            #     self.Ns[s] += 1
 
-            # if v != 0:
-            self.Ns[s] += 1
-            # elif self.Ns[s] > 0:
-            #     self.Ns[s] -= 1
+        # if v != 0:
+        self.Ns[s] += 1
+        # elif self.Ns[s] > 0:
+        #     self.Ns[s] -= 1
         return -v
 
 
@@ -986,12 +992,12 @@ class Coach():
             s = str(canonicalBoard)
 
             new_board, new_Player = self.game.getNextState(board, self.curPlayer, action)
-            if (s, action) not in NRs:
-                NRs[(s, action)] = 0
+            if s not in NRs:
+                NRs[s] = 0
             else:
-                NRs[(s, action)] += 1
+                NRs[s] += 1
 
-            if NRs[(s, action)] < 3:
+            if NRs[s] < 10:
                 board = new_board
                 self.curPlayer = new_Player
             else:
@@ -1013,7 +1019,7 @@ class Coach():
                 board.display(1, self.mcts)
                 if (s, action) in self.mcts.Qsa:
                     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]} - {board}")
+                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:4.2f} - {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
