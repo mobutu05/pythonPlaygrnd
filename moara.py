@@ -997,7 +997,7 @@ class Coach():
             else:
                 NRs[s] += 1
 
-            if NRs[s] < 10:
+            if NRs[s] < 10 and episodeStep < 1000:
                 board = new_board
                 self.curPlayer = new_Player
             else:
@@ -1169,25 +1169,25 @@ class HumanPlayer():
 
 if __name__ == "__main__":
     args = dotdict({
-        'numIters': 100,
-        'numEps': 1,
+        'numIters': 1000,
+        'numEps': 3,
         'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 5,
+        'numMCTSSims': 15,
         'arenaCompare': 40,
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 200,
+        'numItersForTrainExamplesHistory': 20,
 
         'lr': 0.001,
         'dropout': 0.3,
         'epochs': 10,
-        'batch_size': 8,
+        'batch_size': 64,
         'cuda': True,
-        'num_channels': 64,
+        'num_channels': 256,
 
     })
     g = Game()
@@ -1204,7 +1204,7 @@ if __name__ == "__main__":
     # trainExamples = []
     # for e in a.trainExamplesHistory:
     #     trainExamples.extend(e)
-    # for _ in range(args.numIters):
+    # for _ in range(args.numIters*10):
     #     shuffle(trainExamples)
     #     n.train(trainExamples)
     #     n.save_checkpoint(folder= args.checkpoint, filename='temp.neuralnet.data')
