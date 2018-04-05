@@ -778,7 +778,7 @@ class MCTS():
             self.Vs[s] = validMoves
             self.Ns[s] = 0
 
-            print(".", end=" ")
+            # print(".", end=" ")
 
             return -v[0]
 
@@ -1017,10 +1017,10 @@ class Coach():
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
             if board.getBoardStatus() == 0:
-                board.display(1, self.mcts)
+                # board.display(1, self.mcts)
                 if (s, action) in self.mcts.Qsa:
                     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:4.2f} - {board}")
+                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:+4.2f} - {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
@@ -1076,7 +1076,7 @@ class Coach():
 
             if trainExamples != []:
                     self.nnet.train(trainExamples)
-                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='new.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
@@ -1192,7 +1192,7 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    n.load_checkpoint(folder=args.checkpoint, filename='temp.neuralnet.data')
+    n.load_checkpoint(folder=args.checkpoint, filename='new.neuralnet.data')
 
     #play
     #function
