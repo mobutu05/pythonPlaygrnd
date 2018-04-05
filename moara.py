@@ -1075,8 +1075,8 @@ class Coach():
             # pmcts = MCTS(self.game, self.pnet, self.args)
 
             if trainExamples != []:
-                self.nnet.train(trainExamples)
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+                    self.nnet.train(trainExamples)
+                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
