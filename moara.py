@@ -1180,11 +1180,11 @@ if __name__ == "__main__":
         'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 20,
+        'numItersForTrainExamplesHistory': 50,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 10,
+        'epochs': 30,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
@@ -1204,10 +1204,10 @@ if __name__ == "__main__":
     # trainExamples = []
     # for e in a.trainExamplesHistory:
     #     trainExamples.extend(e)
-    # for _ in range(args.numIters*10):
+    # for _ in range(args.numIters):
     #     shuffle(trainExamples)
     #     n.train(trainExamples)
-    #     n.save_checkpoint(folder= args.checkpoint, filename='temp.neuralnet.data')
+    #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
 
     #train
     c = Coach(g, n, args)
