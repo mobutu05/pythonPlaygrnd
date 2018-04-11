@@ -72,7 +72,7 @@ class Arena():
             board, curPlayer = self.game.getNextState(board, curPlayer, action)
             if (str(canonicalBoard), action) in self.mcts.Qsa:
                 # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]} - {board}")
+                print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]:+4.2f} - {board}")
             if action < 24:
                 print(f"move: {Game.validPositions[action]}")
             elif action < 88:
@@ -1166,10 +1166,20 @@ class HumanPlayer():
 
         return move
 
+class RandomPlayer():
+    def __init__(self, game):
+        self.game = game
+
+    def play(self, board):
+        a = np.random.randint(self.game.getActionSize())
+        valids = self.game.getValidMoves(board, 1)
+        while valids[a]!=1:
+            a = np.random.randint(self.game.getActionSize())
+        return a
 
 if __name__ == "__main__":
     args = dotdict({
-        'numIters': 1000,
+        'numIters': 100,
         'numEps': 3,
         'tempThreshold': 50,
         'updateThreshold': 0.6,
@@ -1180,11 +1190,11 @@ if __name__ == "__main__":
         'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 50,
+        'numItersForTrainExamplesHistory': 30,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 30,
+        'epochs': 10,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
@@ -1196,19 +1206,22 @@ if __name__ == "__main__":
 
     #play
     #function
-    # hp = HumanPlayer(g).play
-    # mcts = MCTS(g,n, args)
-    # neural = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
-    # a = Arena(neural, hp, g, args, mcts)
-    # print(a.playGames(2, verbose=True))
-    # trainExamples = []
-    # for e in a.trainExamplesHistory:
-    #     trainExamples.extend(e)
-    # for _ in range(args.numIters):
-    #     shuffle(trainExamples)
-    #     n.train(trainExamples)
-    #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
+    # otherPlayer = HumanPlayer(g).play
+    otherPlayer = RandomPlayer(g).play
+    mcts = MCTS(g,n, args)
+    neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+    a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
+    result = a.playGames(10, verbose=False)
 
+    trainExamples = []
+    for e in a.trainExamplesHistory:
+        trainExamples.extend(e)
+    for i in range(args.numIters // 10):
+        print(f"ITERATION {i}")
+        shuffle(trainExamples)
+        n.train(trainExamples)
+        n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
+    print(result)
     #train
     c = Coach(g, n, args)
     c.learn()
