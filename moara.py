@@ -164,14 +164,14 @@ class Board():
             # arr1[3][1] = -1
             # arr1[5][1] = -1
             # second plane - number of pieces for player 1
-            arr2 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr2[3][3] = 9  # player/opponent
+            arr2 = np.array([[0. for y in range(7)] for x in range(7)])
+            arr2[3][3] = 1.0  # player/opponent  / 9
             # third plane - number of pieces for player 2
-            arr3 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr3[3][3] = 9  # player/opponent
+            arr3 = np.array([[0. for y in range(7)] for x in range(7)])
+            arr3[3][3] = 1.0  # player/opponent / 9
             # fourth plane - flag is current player must capture
-            arr4 = np.array([[0 for y in range(7)] for x in range(7)])
-            arr4[3][3] = 0
+            arr4 = np.array([[0. for y in range(7)] for x in range(7)])
+            arr4[3][3] = 0.0
             self.internalArray = np.array([arr1, arr2, arr3, arr4])
         else:
             self.internalArray = np.copy(copy_)
@@ -207,33 +207,33 @@ class Board():
 
     def getPlayerCount(self, player):
         if player == 1:
-            return self.internalArray[1][3][3]
+            return int(round(self.internalArray[1][3][3] * 9))
         else:
-            return self.internalArray[2][3][3]
+            return int(round(self.internalArray[2][3][3] * 9))
 
     def setPlayerCount(self, player, count):
         if player == 1:
-            self.internalArray[1][3][3] = count
+            self.internalArray[1][3][3] = count / 9
         else:
-            self.internalArray[2][3][3] = count
+            self.internalArray[2][3][3] = count / 9
 
     def getOpponentCount(self, player):
         if player == 1:
-            return self.internalArray[2][3][3]
+            return int(round(self.internalArray[2][3][3] * 9))
         else:
-            return self.internalArray[1][3][3]
+            return int(round(self.internalArray[1][3][3] * 9))
 
     def setOpponentCount(self, player, count):
         if player == 1:
-            self.internalArray[2][3][3] = count
+            self.internalArray[2][3][3] = count / 9
         else:
-            self.internalArray[1][3][3] = count
+            self.internalArray[1][3][3] = count / 9
 
     def getBoardStatus(self):
-        return self.internalArray[3][3][3]
+        return int(round(self.internalArray[3][3][3] * 100))
 
     def setBoardStatus(self, status):
-        self.internalArray[3][3][3] = status
+        self.internalArray[3][3][3] = status / 100
 
     def display(self, current_player, mcts = None, invariant=1):
         n = self.internalArray.shape[1]
@@ -1076,7 +1076,7 @@ class Coach():
 
             if trainExamples != []:
                     self.nnet.train(trainExamples)
-                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='new.neuralnet.data')
+                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='new2.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
@@ -1179,7 +1179,7 @@ class RandomPlayer():
 
 if __name__ == "__main__":
     args = dotdict({
-        'numIters': 100,
+        'numIters': 50,
         'numEps': 3,
         'tempThreshold': 50,
         'updateThreshold': 0.6,
@@ -1202,26 +1202,26 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    n.load_checkpoint(folder=args.checkpoint, filename='new.neuralnet.data')
+    n.load_checkpoint(folder=args.checkpoint, filename='new2.neuralnet.data')
 
     #play
     #function
     # otherPlayer = HumanPlayer(g).play
-    otherPlayer = RandomPlayer(g).play
-    mcts = MCTS(g,n, args)
-    neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
-    a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
-    result = a.playGames(10, verbose=False)
-
-    trainExamples = []
-    for e in a.trainExamplesHistory:
-        trainExamples.extend(e)
-    for i in range(args.numIters // 10):
-        print(f"ITERATION {i}")
-        shuffle(trainExamples)
-        n.train(trainExamples)
-        n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
-    print(result)
+    # otherPlayer = RandomPlayer(g).play
+    # mcts = MCTS(g,n, args)
+    # neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+    # a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
+    # result = a.playGames(10, verbose=False)
+    #
+    # trainExamples = []
+    # for e in a.trainExamplesHistory:
+    #     trainExamples.extend(e)
+    # for i in range(args.numIters // 10):
+    #     print(f"ITERATION {i}")
+    #     shuffle(trainExamples)
+    #     n.train(trainExamples)
+    #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
+    # print(result)
     #train
     c = Coach(g, n, args)
     c.learn()
