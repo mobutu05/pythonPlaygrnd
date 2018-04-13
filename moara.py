@@ -1179,22 +1179,22 @@ class RandomPlayer():
 
 if __name__ == "__main__":
     args = dotdict({
-        'numIters': 50,
-        'numEps': 3,
+        'numIters': 1000,
+        'numEps': 30,
         'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 15,
+        'numMCTSSims': 25,
         'arenaCompare': 40,
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 30,
+        'numItersForTrainExamplesHistory': 100,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 10,
+        'epochs': 20,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
