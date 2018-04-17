@@ -8,6 +8,7 @@ import numpy as np
 from keras import Input, Model
 from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout
 from keras.optimizers import Adam
+import matplotlib.pyplot as plt
 
 import copy
 
@@ -893,12 +894,22 @@ class NeuralNet():
         s_fc1 = Dropout(args.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
         s_fc2 = Dropout(args.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(256)(s_fc1))))  # batch_size x 1024
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], optimizer=Adam(args.lr))
+
+    def evaluate(self, examples):
+        input_boards, target_pis, target_vs = list(zip(*examples))
+        input_boards = np.asarray(input_boards)
+        target_pis = np.asarray(target_pis)
+        target_vs = np.asarray(target_vs)
+        a = self.model.evaluate(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size, verbose=1)
+
+        print(a)
+        #print(b)
 
     def train(self, examples):
         """
@@ -913,11 +924,27 @@ class NeuralNet():
         """
 
         input_boards, target_pis, target_vs = list(zip(*examples))
+        print("mumu")
+        print(len(examples))
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
-        self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
-                       epochs=self.args.epochs)
+        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
+                       epochs = self.args.epochs, validation_split = 0.1)
+        for key in result.history.keys():
+            print(key)
+            print(result.history[key])
+
+        plt.clf()
+        epochs = range(1, len(result.history['loss']) + 1)
+        plt.plot(epochs, result.history['loss'], 'bo', label='Training acc')
+        plt.plot(epochs, result.history['val_loss'], 'b', label='Validation acc')
+        plt.title('Training and validation accuracy')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.show()
+
 
     def predict(self, board):
         """
@@ -1043,6 +1070,7 @@ class Coach():
             # bookkeeping
             print('------ITER ' + str(i) + '------')
             # examples of the iteration
+            validation = []
             if not self.skipFirstSelfPlay or i > 1:
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
@@ -1051,7 +1079,7 @@ class Coach():
                     example = self.executeEpisode()
                     if example != []:
                         iterationTrainExamples += example
-
+                # self.nnet.evaluate(iterationTrainExamples)
                 # save the iteration examples to the history
                 self.trainExamplesHistory.append(iterationTrainExamples)
 
@@ -1074,9 +1102,11 @@ class Coach():
             # self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # pmcts = MCTS(self.game, self.pnet, self.args)
 
+
+
             if trainExamples != []:
                     self.nnet.train(trainExamples)
-                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='new2.neuralnet.data')
+                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
             # nmcts = MCTS(self.game, self.nnet, self.args)
 
             # print('PITTING AGAINST PREVIOUS VERSION')
@@ -1180,7 +1210,7 @@ class RandomPlayer():
 if __name__ == "__main__":
     args = dotdict({
         'numIters': 1000,
-        'numEps': 30,
+        'numEps': 1,
         'tempThreshold': 50,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
@@ -1189,8 +1219,9 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
+        'filename' : 'no11.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 100,
+        'numItersForTrainExamplesHistory': 300,
 
         'lr': 0.001,
         'dropout': 0.3,
@@ -1202,7 +1233,7 @@ if __name__ == "__main__":
     })
     g = Game()
     n = NeuralNet(g, args)
-    n.load_checkpoint(folder=args.checkpoint, filename='new2.neuralnet.data')
+    n.load_checkpoint(folder=args.checkpoint, filename=args.filename)
 
     #play
     #function
