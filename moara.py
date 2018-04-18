@@ -20,7 +20,7 @@ class Arena():
     An Arena class where any 2 agents can be pit against each other.
     """
 
-    def __init__(self, player1, player2, game, args, mcts, display=None):
+    def __init__(self, player1, player2, game, args, display=None):
         """
         Input:
             player 1,2: two functions that takes board as input, return action
@@ -37,7 +37,6 @@ class Arena():
         self.game = game
         self.display = display
         self.args = args
-        self.mcts = mcts
 
     def playGame(self, verbose=False):
         """
@@ -55,32 +54,42 @@ class Arena():
         it = 0
         trainExamples = []
         r = 777
+        NRs = {}
         while r == 777:
             it += 1
             if verbose:
                 print("Turn ", str(it), "Player ", str(curPlayer))
-                board.display(1)
+                # board.display(1)
             canonicalBoard = board.getCanonicalForm(curPlayer)
+            s = str(canonicalBoard)
             action = players[curPlayer + 1](canonicalBoard)
 
             valids = self.game.getValidMoves(canonicalBoard, 1)
-
-            if valids[action] == 0:
-                print(action)
-                assert valids[action] > 0
+            if verbose:
+                if valids[action] == 0:
+                    print(action)
+                    assert valids[action] > 0
             p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
             trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
             board, curPlayer = self.game.getNextState(board, curPlayer, action)
-            if (str(canonicalBoard), action) in self.mcts.Qsa:
-                # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]:+4.2f} - {board}")
-            if action < 24:
-                print(f"move: {Game.validPositions[action]}")
-            elif action < 88:
-                print(f"move: {Game.validActions[action - 24]}")
+            if s not in NRs:
+                NRs[s] = 0
             else:
-                print(f"move: PASS")
-            r = self.game.getGameEnded(board, 1)
+                NRs[s] += 1
+            # if (str(canonicalBoard), action) in self.mcts.Qsa:
+            #     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+            #     print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]:+4.2f} - {board}")
+            # if action < 24:
+            #     print(f"move: {Game.validPositions[action]}")
+            # elif action < 88:
+            #     print(f"move: {Game.validActions[action - 24]}")
+            # else:
+            #     print(f"move: PASS")
+            if NRs[s] < 10:
+                r = self.game.getGameEnded(board, 1)
+            else:
+                print("Position repeated too many times")
+                r = 0
 
         if verbose:
 
@@ -943,8 +952,11 @@ class NeuralNet():
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.legend()
+        # plt.show()
+        plt.ion()
         plt.show()
-
+        # plt.draw()
+        plt.pause(0.001)
 
     def predict(self, board):
         """
@@ -1047,7 +1059,7 @@ class Coach():
                 # board.display(1, self.mcts)
                 if (s, action) in self.mcts.Qsa:
                     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)]:+4.2f} - {board}")
+                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} - {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
@@ -1106,22 +1118,24 @@ class Coach():
 
             if trainExamples != []:
                     self.nnet.train(trainExamples)
-                    self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
+                    # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
-
+            #
             # print('PITTING AGAINST PREVIOUS VERSION')
             # arena = Arena(lambda x: np.argmax(pmcts.getActionProb(x, temp=0)),
-            #               lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game)
-            # pwins, nwins, draws = arena.playGames(self.args.arenaCompare)
+            #               lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game, self.args)
+            # pwins, nwins, draws = arena.playGames(self.args.arenaCompare, verbose=True)
             #
             # print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
             # if pwins + nwins > 0 and float(nwins) / (pwins + nwins) < self.args.updateThreshold:
             #     print('REJECTING NEW MODEL')
-            #     self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
+            #     self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # else:
             #     print('ACCEPTING NEW MODEL')
-            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
+            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
             # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
 
     def saveTrainExamples(self, iteration):
         # folder = self.args.checkpoint
@@ -1215,17 +1229,17 @@ if __name__ == "__main__":
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
         'numMCTSSims': 25,
-        'arenaCompare': 40,
+        'arenaCompare': 2,
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
         'filename' : 'no11.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 300,
+        'numItersForTrainExamplesHistory': 100,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 20,
+        'epochs': 10,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
