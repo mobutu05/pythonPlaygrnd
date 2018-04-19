@@ -709,6 +709,8 @@ class MCTS():
             # print(" ")
             # print(".", end="")
             # print(".")
+
+            #number of times each state occurs during this tree search
             self.NRs = {}  # clean counter for each run
             v = self.search(canonicalBoard)
             self.deep = 0
@@ -750,7 +752,7 @@ class MCTS():
         # print (self.deep)
         self.deep += 1
         if self.deep > 50:
-            return  0
+            return 0
         s = str(canonicalBoard)
         # if s not in self.NRs:
         #     self.NRs[s] = 0
@@ -812,6 +814,9 @@ class MCTS():
         # a = best_act #  np.random.choice(best_act)
 
         valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
+
+        #skip actions that would lead to a repeated state...
+
         u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
                         if (s,a) in self.Qsa
                         else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
@@ -823,10 +828,14 @@ class MCTS():
         next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
         next_s = next_board.getCanonicalForm(next_player)
 
-        # if s not in self.NRs:
-        #     self.NRs[s] = 0
-        # else:
-        #     self.NRs[s] += 1
+
+        if next_s not in self.NRs:
+            self.NRs[next_s] = 0
+        else:
+            self.NRs[next_s] += 1
+            if self.NRs[next_s] > 2:
+                #try another action
+                pass
         # if (self.deep > 200):
         #     # next_s.display(next_player)
         #     # print(f"too deep {self.deep}")
@@ -908,7 +917,9 @@ class NeuralNet():
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
-        self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], optimizer=Adam(args.lr))
+        self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'],
+                           loss_weights=[1., 10.], optimizer=Adam(args.lr))
+        print(self.model.summary())
 
     def evaluate(self, examples):
         input_boards, target_pis, target_vs = list(zip(*examples))
@@ -1093,7 +1104,7 @@ class Coach():
                         iterationTrainExamples += example
                 # self.nnet.evaluate(iterationTrainExamples)
                 # save the iteration examples to the history
-                self.trainExamplesHistory.append(iterationTrainExamples)
+                        self.trainExamplesHistory.append(iterationTrainExamples)
 
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
                 print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
@@ -1233,13 +1244,13 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no11.neural.data',
+        'filename' : 'no14.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 100,
+        'numItersForTrainExamplesHistory': 10,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 10,
+        'epochs': 50,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
