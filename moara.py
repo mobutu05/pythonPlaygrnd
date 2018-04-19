@@ -751,8 +751,9 @@ class MCTS():
         # self.game.display(canonicalBoard, 1)
         # print (self.deep)
         self.deep += 1
-        if self.deep > 50:
-            return 0
+        # if self.deep > 50:
+        #     return 0
+
         s = str(canonicalBoard)
         # if s not in self.NRs:
         #     self.NRs[s] = 0
@@ -1244,7 +1245,7 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no14.neural.data',
+        'filename' : 'no15.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 10,
 
