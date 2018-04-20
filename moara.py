@@ -752,7 +752,7 @@ class MCTS():
         # print (self.deep)
         local_history = history.copy()
         self.deep += 1
-        if self.deep > 100:
+        if self.deep > 1000:
             return 7
 
         s = str(canonicalBoard)
@@ -835,11 +835,12 @@ class MCTS():
                 local_history[str(next_s)] = 0
                 break
             else:
-                local_history[str(next_s)] += 1
+
                 if local_history[str(next_s)] > 3:
                     #try another action
                     valid_actions.remove(a)
                 else:
+                    local_history[str(next_s)] += 1
                     break
             # if (self.deep > 200):
             #     # next_s.display(next_player)
@@ -1060,20 +1061,11 @@ class Coach():
             else:
                 NRs[s] += 1
 
-            if NRs[s] < 10 and episodeStep < 1000:
+            if NRs[s] < 3 and episodeStep < 1000:
                 board = new_board
                 self.curPlayer = new_Player
             else:
-                # self.mcts.Qsa[(s, action)] = 0
-                # self.mcts.Nsa[(s, action)] = self.mcts.Nsa[(s, action)] // 2
-                # if self.curPlayer == 1:
-                    #towards 0
-                # self.mcts.Ps[s][action] /= 2
-                # else:
-                #     #towards 1
-                #     self.mcts.Ps[s][action] = math.sqrt(self.mcts.Ps[s][action])
                 r = 0
-                # return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples] #abort this episode
                 return []
 
 
