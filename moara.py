@@ -711,8 +711,8 @@ class MCTS():
             # print(".")
 
             #number of times each state occurs during this tree search
-            self.NRs = {}  # clean counter for each run
-            v = self.search(canonicalBoard)
+            # self.NRs = {}  # clean counter for each run
+            v = self.search(canonicalBoard, {})
             self.deep = 0
 
         # print ("")
@@ -729,7 +729,7 @@ class MCTS():
         probs = [x / float(sum(counts)) for x in counts]
         return probs
 
-    def search(self, canonicalBoard):
+    def search(self, canonicalBoard, history):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -750,9 +750,10 @@ class MCTS():
         """
         # self.game.display(canonicalBoard, 1)
         # print (self.deep)
+        local_history = history.copy()
         self.deep += 1
-        # if self.deep > 50:
-        #     return 0
+        if self.deep > 100:
+            return 7
 
         s = str(canonicalBoard)
         # if s not in self.NRs:
@@ -817,34 +818,45 @@ class MCTS():
         valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
 
         #skip actions that would lead to a repeated state...
+        while True:
+            u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
+                            if (s,a) in self.Qsa
+                            else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
+            # get action with the best ucb
+            best_pair = functools.reduce(lambda acc, pair: pair
+                            if pair[1] > acc[1] else acc, zip(valid_actions, u_values),(best_act, cur_best))
+            a = best_pair[0]
 
-        u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
-                        if (s,a) in self.Qsa
-                        else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-        # get action with the best ucb
-        best_pair = functools.reduce(lambda acc, pair: pair
-                        if pair[1] > acc[1] else acc, zip(valid_actions, u_values),(best_act, cur_best))
-        a = best_pair[0]
-
-        next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
-        next_s = next_board.getCanonicalForm(next_player)
+            next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
+            next_s = next_board.getCanonicalForm(next_player)
 
 
-        if next_s not in self.NRs:
-            self.NRs[next_s] = 0
-        else:
-            self.NRs[next_s] += 1
-            if self.NRs[next_s] > 2:
-                #try another action
-                pass
-        # if (self.deep > 200):
-        #     # next_s.display(next_player)
-        #     # print(f"too deep {self.deep}")
-        #     v = 0
-        #     # self.Ps[s][a] /= 2
-        #     # self.Qsa[(s, a)] = 0
-        # elif self.NRs[s] < 2:
-        v = self.search(next_s)
+            if str(next_s) not in local_history:
+                local_history[str(next_s)] = 0
+                break
+            else:
+                local_history[str(next_s)] += 1
+                if local_history[str(next_s)] > 3:
+                    #try another action
+                    valid_actions.remove(a)
+                else:
+                    break
+            # if (self.deep > 200):
+            #     # next_s.display(next_player)
+            #     # print(f"too deep {self.deep}")
+            #     v = 0
+            #     # self.Ps[s][a] /= 2
+            #     # self.Qsa[(s, a)] = 0
+            # elif self.NRs[s] < 2:
+        v = self.search(next_s, local_history)
+        # if v == 7:
+        #     # we have a recursion issue, choose a different action?
+        #     valid_actions.remove(a)
+        #     self.deep = 0
+        #     pass
+        # else:
+        #     break
+
         # else:
         #     v = 0 # self.Qsa[(s,a)]
         #     # self.Ps[s][a] /= 2
@@ -1245,7 +1257,7 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no15.neural.data',
+        'filename' : 'no17.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 10,
 
