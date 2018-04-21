@@ -774,7 +774,8 @@ class MCTS():
 
             ps, v = self.nnet.predict(canonicalBoard)
             # ps =np.array([1.0 for x in range(self.game.getActionSize())])
-            # v = [0]
+            # ps  = 0.1 * abs(np.random.randn(self.game.getActionSize()))
+            # v = [abs(np.random.randn() * 0.1)]
             validMoves = self.game.getValidMoves(canonicalBoard, 1)
             ps = ps * validMoves  # masking invalid moves
             sum_Ps_s = np.sum(ps)
