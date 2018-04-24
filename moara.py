@@ -568,12 +568,12 @@ class Game():
         player_valid = self.getLegalMoves(board, player)
         opponent_valid = self.getLegalMoves(board, -player)
         if player_valid == [] and opponent_valid == []:
-            return 0  # draw
+            return 0.001  # draw
         if board.getOpponentCount(player) < 3 or opponent_valid == []:
             return 1
         if board.getPlayerCount(player) < 3 or player_valid == []:
             return -1
-        return 777
+        return 0
 
     def getSymmetries(self, board, pi):
         """
@@ -674,8 +674,72 @@ class Game():
             result = list(filter(lambda x: board.getPosition(x) == player, Game.validPositions))
             result = [Game.validPositions.index(x) for x in result]
         return result
+'''
+class MCTS2():
 
+    def __init__(self, game, nnet, args):
+        self.game = game
+        self.nnet = nnet
+        self.args = args
+        self.visited = {}
+        self.improvedPolicy = {}
+        self.initialPolicy = {}
+        pass
 
+    def search(self, canonicalBoard):
+        reward = self.game.getGameEnded(canonicalBoard, 1)
+        if reward != 777:
+            return -reward
+        s = str(canonicalBoard)
+        if s not in self.visited:
+            self.visited[s] = 1
+            self.initialPolicy[s], v = self.nnet.predict(canonicalBoard)
+            return -v
+
+        max_u, best_a = -float("inf"), -1
+        for a in range(self.game.getValidMoves(canonicalBoard, 1)):
+            u = Q[s][a] + self.args.c_puct * P[s][a] * math.sqrt(sum(N[s])) / (1 + N[s][a])
+            if u > max_u:
+                max_u = u
+                best_a = a
+        a = best_a
+
+        sp = game.nextState(s, a)
+        v = search(sp, game, nnet)
+
+        Q[s][a] = (N[s][a] * Q[s][a] + v) / (N[s][a] + 1)
+        N[s][a] += 1
+        return -v
+
+    def policyIterSP(self):
+        examples = []
+        for i in range(args.numIters):
+            for e in range(args.numEps):
+                examples += self.executeEpisode()  # collect examples from this game
+
+            self.nnet.train(examples)
+            # frac_win = pit(new_nnet, nnet)  # compare new net with previous net
+            # if frac_win > threshold:
+            #     nnet = new_nnet  # replace with new net
+        # return nnet
+
+    def executeEpisode(self):
+        examples = []
+        player = 1
+        board = self.game.getInitBoard()
+        canonicalBoard = board.getCanonicalForm(player)
+        s = str(canonicalBoard)
+        while True:
+            for _ in range(self.args.numMCTSSims):
+                self.search(canonicalBoard)
+            counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
+            examples.append([s, self.improvedPolicy[s], None])  # rewards can not be determined yet
+            a = np.random.choice(len(self.improvedPolicy[s]), p=self.improvedPolicy[s])  # sample action from improved policy
+            s = self.game.getNextState()
+            if self.game.getGameEnded(s, player):
+                examples = assignRewards(examples, game.gameReward(s))
+                return examples
+'''
 class MCTS():
     """
     This class handles the MCTS tree.
@@ -704,6 +768,7 @@ class MCTS():
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
+        NRs = {}  # clean counter for each move
         for i in range(self.args.numMCTSSims):
             # print(" ")
             # print(" ")
@@ -711,23 +776,40 @@ class MCTS():
             # print(".")
 
             #number of times each state occurs during this tree search
-            # self.NRs = {}  # clean counter for each run
-            v = self.search(canonicalBoard, {})
+            self.search_counter = i
+            v = self.search(canonicalBoard, NRs)
             self.deep = 0
 
         # print ("")
         s = str(canonicalBoard)
         counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
 
-        if temp == 0:
-            bestA = np.argmax(counts)
-            probs = [0] * len(counts)
-            probs[bestA] = 1
-            return probs
+        return counts
 
-        counts = [x ** (1. / temp) for x in counts]
-        probs = [x / float(sum(counts)) for x in counts]
-        return probs
+    def getBestAction(self, s, valid_actions):
+        cur_best = -float('inf')
+        best_act = -1
+        # u_values = [
+        #     (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
+        #     if (s, a) in self.Qsa
+        #     else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
+        # # get action with the best ucb
+        # best_pair = functools.reduce(lambda acc, pair: pair
+        # if pair[1] > acc[1] else acc, zip(valid_actions, u_values), (best_act, cur_best))
+        # a = best_pair[0]
+
+        for a in valid_actions:
+            if (s, a) in self.Qsa:
+                u = self.Qsa[(s, a)] + \
+                    self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])
+            else:
+                u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
+
+            if u > cur_best:
+                cur_best = u
+                best_act = a
+        a = best_act
+        return a
 
     def search(self, canonicalBoard, history):
         """
@@ -753,7 +835,7 @@ class MCTS():
         local_history = history.copy()
         self.deep += 1
         if self.deep > 1000:
-            return 7
+            return 0
 
         s = str(canonicalBoard)
         # if s not in self.NRs:
@@ -765,7 +847,7 @@ class MCTS():
         # print(s)
         if s not in self.Es:
             self.Es[s] = self.game.getGameEnded(canonicalBoard, 1)
-        if self.Es[s] != 777:
+        if self.Es[s] != 0:
             # terminal node
             return -self.Es[s]
 
@@ -797,102 +879,47 @@ class MCTS():
             return -v[0]
 
         valids = self.Vs[s]
-        cur_best = -float('inf')
-        best_act = -1
-        # best_act = []
-        # pick the action with the highest upper confidence bound
-        # for a in filter(lambda a: valids[a] == 1, range(self.game.getActionSize())):
-        #     if (s, a) in self.Qsa:
-        #         u = self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (
-        #             1 + self.Nsa[(s, a)])
-        #     else:
-        #         u = self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)  # Q = 0 ?
-        #
-        #     if u > cur_best:
-        #         cur_best = u
-        #         best_act = a
-        #     # elif u == cur_best:
-        #     #     best_act.append(a)
-        # a = best_act #  np.random.choice(best_act)
 
         valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
-
+        # a = valid_actions[0]#choose the first (possibly only) at the beginning
         #skip actions that would lead to a repeated state...
         while True:
-            u_values = [(self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
-                            if (s,a) in self.Qsa
-                            else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-            # get action with the best ucb
-            best_pair = functools.reduce(lambda acc, pair: pair
-                            if pair[1] > acc[1] else acc, zip(valid_actions, u_values),(best_act, cur_best))
-            a = best_pair[0]
-
+            a = self.getBestAction(s, valid_actions)
             next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
             next_s = next_board.getCanonicalForm(next_player)
 
-
+            #if states keep repeating
             if str(next_s) not in local_history:
-                local_history[str(next_s)] = 0
+                local_history[str(next_s)] = 1
                 break
             else:
-
-                if local_history[str(next_s)] > 3:
+                if local_history[str(next_s)] > 1:
                     #try another action
-                    valid_actions.remove(a)
+                    if len(valid_actions) > 1:
+                        valid_actions.remove(a)
+                        # print(f"Iter {self.search_counter}. Removed {a}. Remaining {valid_actions}. ")
+                        self.Qsa[(s, a)] = -1.0
+                        if not (s, a) in self.Nsa:
+                            self.Nsa[(s, a)] = 0
+                    else:
+                        #trying to remove
+                        print (f"trying to remove {a}")
+                        break
                 else:
                     local_history[str(next_s)] += 1
                     break
-            # if (self.deep > 200):
-            #     # next_s.display(next_player)
-            #     # print(f"too deep {self.deep}")
-            #     v = 0
-            #     # self.Ps[s][a] /= 2
-            #     # self.Qsa[(s, a)] = 0
-            # elif self.NRs[s] < 2:
         v = self.search(next_s, local_history)
-        # if v == 7:
-        #     # we have a recursion issue, choose a different action?
-        #     valid_actions.remove(a)
-        #     self.deep = 0
-        #     pass
-        # else:
-        #     break
-
-        # else:
-        #     v = 0 # self.Qsa[(s,a)]
-        #     # self.Ps[s][a] /= 2
-
-        # if self.NRs[s] < 3:
-        # v = self.search(next_s)
-        # else:
-        #     v = 0  # draw if too much is spent playing
 
         self.deep -= 1
-        # if v == 0:
-        #     return 0
-
-        # if self.NRs[s] < 2:
         if (s, a) in self.Qsa:
-            # if v == 0:
-            #     # self.Qsa[(s, a)] = 0
-            #     #self.Nsa[(s, a)] -= 1
-            #     pass
-            # else:
             self.Qsa[(s, a)] = ((self.Nsa[(s, a)]) * self.Qsa[(s, a)] + v) / (self.Nsa[(s, a)] + 1)
             self.Nsa[(s, a)] += 1
 
         else:
             self.Qsa[(s, a)] = v
             self.Nsa[(s, a)] = 1
-            # if v == 0:
-            #     self.Ns[s] += 1
-
-        # if v != 0:
         self.Ns[s] += 1
-        # elif self.Ns[s] > 0:
-        #     self.Ns[s] -= 1
         return -v
-
 
 class NeuralNet():
     """
@@ -965,9 +992,9 @@ class NeuralNet():
         target_vs = np.asarray(target_vs)
         result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
                        epochs = self.args.epochs, validation_split = 0.1)
-        for key in result.history.keys():
-            print(key)
-            print(result.history[key])
+        # for key in result.history.keys():
+        #     print(key)
+        #     print(result.history[key])
 
         plt.clf()
         epochs = range(1, len(result.history['loss']) + 1)
@@ -1038,50 +1065,71 @@ class Coach():
         board = self.game.getInitBoard()
         self.curPlayer = 1
         episodeStep = 0
-        board.display(1, self.mcts)
+        # board.display(1, self.mcts)
         NRs = {}
+
         while True:
             episodeStep += 1
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
             temp = int(episodeStep < self.args.tempThreshold)
             # temp = 1
 
-            pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
-            sym = self.game.getSymmetries(canonicalBoard, pi)
-            for b, p in sym:
-                trainExamples.append([b.internalArray, self.curPlayer, p, None])
+            counts = self.mcts.getActionProb(canonicalBoard, temp=temp)
+            retry = False
+            while True:
+                if temp == 0:
+                    bestA = np.argmax(counts)
+                    probs = [0] * len(counts)
+                    probs[bestA] = 1
+                else:
+                    counts = [x ** (1. / temp) for x in counts]
+                    probs = [x / float(sum(counts)) for x in counts]
 
-            action = np.random.choice(len(pi), p=pi)
+                sym = self.game.getSymmetries(canonicalBoard, probs)
+                for b, p in sym:
+                    trainExamples.append([b.internalArray, self.curPlayer, p, None])
 
+                action = np.random.choice(len(probs), p=probs)
+                if retry:
+                    print(f"Retry action {action}")
+                new_board, new_Player = self.game.getNextState(board, self.curPlayer, action)
+
+                s = str(new_board.getCanonicalForm(new_Player))
+                if s not in NRs:
+                    NRs[s] = 1
+                else:
+                    NRs[s] += 1
+
+                if NRs[s] < 2 and episodeStep < 1000:
+                    break
+                else:
+                    #remove action from list and retry next action
+                    counts[action] = 0
+                    print(f"Action {action} tried too many times. Retry...")
+                    print(np.sum(counts))
+                    if np.sum(counts) == 0:
+                        return []
+                    else:
+
+                        retry = True
+
+
+            board = new_board
+            self.curPlayer = new_Player
             s = str(canonicalBoard)
-
-            new_board, new_Player = self.game.getNextState(board, self.curPlayer, action)
-            if s not in NRs:
-                NRs[s] = 0
-            else:
-                NRs[s] += 1
-
-            if NRs[s] < 3 and episodeStep < 1000:
-                board = new_board
-                self.curPlayer = new_Player
-            else:
-                r = 0
-                return []
-
-
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
-            if board.getBoardStatus() == 0:
+            # if board.getBoardStatus() == 0:
                 # board.display(1, self.mcts)
-                if (s, action) in self.mcts.Qsa:
-                    # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                    print(f"{episodeStep}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} - {board}")
+            if (s, action) in self.mcts.Qsa:
+                # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+                print(f"{episodeStep}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
             # if episodeStep > 3000:
             #     r = 0
-            if r != 777:
+            if r != 0:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
     def learn(self):
@@ -1251,11 +1299,11 @@ if __name__ == "__main__":
         'load_model': False,
         'filename' : 'no17.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 10,
+        'numItersForTrainExamplesHistory': 200,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 50,
+        'epochs': 20,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
@@ -1286,4 +1334,6 @@ if __name__ == "__main__":
     #train
     c = Coach(g, n, args)
     c.learn()
+    # m = MCTS2(g, n, args)
+    # m.policyIterSP()
     print("moara")
