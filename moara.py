@@ -832,12 +832,18 @@ class MCTS():
         """
         # self.game.display(canonicalBoard, 1)
         # print (self.deep)
+        s = str(canonicalBoard)
         local_history = history.copy()
+        if s not in local_history:
+            local_history[s] = 1
+        else:
+            local_history[s] += 1
+
+
+
         self.deep += 1
         if self.deep > 1000:
             return 0
-
-        s = str(canonicalBoard)
         # if s not in self.NRs:
         #     self.NRs[s] = 0
         # else:
@@ -851,14 +857,18 @@ class MCTS():
             # terminal node
             return -self.Es[s]
 
-        if s not in self.Ps:
+        if s not in self.Ps or local_history[s] > 1:
             # leaf node
 
             ps, v = self.nnet.predict(canonicalBoard)
+            if local_history[s] > 1:
+                return -v[0]
             # ps =np.array([1.0 for x in range(self.game.getActionSize())])
             # ps  = 0.1 * abs(np.random.randn(self.game.getActionSize()))
             # v = [abs(np.random.randn() * 0.1)]
+
             validMoves = self.game.getValidMoves(canonicalBoard, 1)
+
             ps = ps * validMoves  # masking invalid moves
             sum_Ps_s = np.sum(ps)
             if sum_Ps_s > 0:
@@ -888,27 +898,27 @@ class MCTS():
             a = self.getBestAction(s, valid_actions)
             next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
             next_s = next_board.getCanonicalForm(next_player)
-
-            #if states keep repeating
-            if str(next_s) not in local_history:
-                local_history[str(next_s)] = 1
-                break
-            else:
-                if local_history[str(next_s)] > 1:
-                    #try another action
-                    if len(valid_actions) > 1:
-                        valid_actions.remove(a)
-                        # print(f"Iter {self.search_counter}. Removed {a}. Remaining {valid_actions}. ")
-                        self.Qsa[(s, a)] = -1.0
-                        if not (s, a) in self.Nsa:
-                            self.Nsa[(s, a)] = 0
-                    else:
-                        #trying to remove
-                        print (f"trying to remove {a}")
-                        break
-                else:
-                    local_history[str(next_s)] += 1
-                    break
+            break
+            # #if states keep repeating
+            # if str(next_s) not in local_history:
+            #     local_history[str(next_s)] = 1
+            #     break
+            # else:
+            #     if local_history[str(next_s)] > 1:
+            #         #try another action
+            #         if len(valid_actions) > 1:
+            #             valid_actions.remove(a)
+            #             # print(f"Iter {self.search_counter}. Removed {a}. Remaining {valid_actions}. ")
+            #             self.Qsa[(s, a)] = -1.0
+            #             if not (s, a) in self.Nsa:
+            #                 self.Nsa[(s, a)] = 0
+            #         else:
+            #             #trying to remove
+            #             print (f"trying to remove {a}")
+            #             break
+            #     else:
+            #         local_history[str(next_s)] += 1
+            #         break
         v = self.search(next_s, local_history)
 
         self.deep -= 1
@@ -1087,8 +1097,7 @@ class Coach():
                     probs = [x / float(sum(counts)) for x in counts]
 
                 sym = self.game.getSymmetries(canonicalBoard, probs)
-                for b, p in sym:
-                    trainExamples.append([b.internalArray, self.curPlayer, p, None])
+
 
                 action = np.random.choice(len(probs), p=probs)
                 if retry:
@@ -1102,17 +1111,27 @@ class Coach():
                     NRs[s] += 1
 
                 if NRs[s] < 2 and episodeStep < 1000:
+                    for b, p in sym:
+                        trainExamples.append([b.internalArray, self.curPlayer, p, None])
                     break
                 else:
                     #remove action from list and retry next action
                     counts[action] = 0
                     print(f"Action {action} tried too many times. Retry...")
-                    print(np.sum(counts))
+                    xxx = list(filter(lambda x: counts[x] != 0, [i for i in range(self.game.getActionSize())]))
+                    print(xxx)
+                    # result = list(
+                    #     filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
+                    # result = [Game.validPositions.index(x) for x in result]
                     if np.sum(counts) == 0:
-                        return []
+                        other_moves = self.game.getValidMoves(board, self.curPlayer)
+                        if other_moves is []:
+                            return []
+                        print("Retry all legal moves")
+                        counts = other_moves
                     else:
-
                         retry = True
+
 
 
             board = new_board
@@ -1124,7 +1143,7 @@ class Coach():
                 # board.display(1, self.mcts)
             if (s, action) in self.mcts.Qsa:
                 # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                print(f"{episodeStep}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
+                print(f"{episodeStep:003d}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
 
@@ -1298,11 +1317,11 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no17.neural.data',
+        'filename' : 'no20.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 200,
 
-        'lr': 0.001,
+        'lr': 0.0001,
         'dropout': 0.3,
         'epochs': 20,
         'batch_size': 64,
