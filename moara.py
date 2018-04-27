@@ -53,49 +53,59 @@ class Arena():
         board = self.game.getInitBoard()
         it = 0
         trainExamples = []
-        r = 777
+        r = 0
         NRs = {}
-        while r == 777:
+        while r == 0:
             it += 1
-            if verbose:
-                print("Turn ", str(it), "Player ", str(curPlayer))
-                # board.display(1)
+
             canonicalBoard = board.getCanonicalForm(curPlayer)
             s = str(canonicalBoard)
+
             action = players[curPlayer + 1](canonicalBoard)
 
             valids = self.game.getValidMoves(canonicalBoard, 1)
             if verbose:
                 if valids[action] == 0:
                     print(action)
+                    print(valids)
+                    board.display(1)
+                    print(str(board))
                     assert valids[action] > 0
-            p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
-            trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
-            board, curPlayer = self.game.getNextState(board, curPlayer, action)
-            if s not in NRs:
-                NRs[s] = 0
-            else:
-                NRs[s] += 1
-            # if (str(canonicalBoard), action) in self.mcts.Qsa:
-            #     # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-            #     print(f"{it}: {self.mcts.Qsa[(str(canonicalBoard), action)]:+4.2f} - {board}")
-            # if action < 24:
-            #     print(f"move: {Game.validPositions[action]}")
-            # elif action < 88:
-            #     print(f"move: {Game.validActions[action - 24]}")
-            # else:
-            #     print(f"move: PASS")
-            if NRs[s] < 10:
-                r = self.game.getGameEnded(board, 1)
-            else:
-                print("Position repeated too many times")
-                r = 0
+            # p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
+            # trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
+            while True:
+                new_board, new_curPlayer = self.game.getNextState(board, curPlayer, action)
 
+                s = str(new_board.getCanonicalForm(new_curPlayer))
+                if s not in NRs:
+                    NRs[s] = 1
+                else:
+                    NRs[s] += 1
+
+                if NRs[s] < 2 and it < 1000:
+                    break
+                else:
+                    print(f"Action {action} lead to duplicate positions")
+                    xxx = list(filter(lambda x: valids[x] != 0, [i for i in range(self.game.getActionSize())]))
+                    print(xxx)
+                    action = np.random.choice(xxx)
+                    print(f"Randomly select {action}")
+                    # if len(xxx) == 1:
+                    #     break
+                    break
+
+
+            board = new_board
+            curPlayer = new_curPlayer
+            r = self.game.getGameEnded(board, 1)
+            if verbose:
+                print(f"Turn {it:03d} {str(board)} Player {curPlayer}")
+                # board.display(1)
         if verbose:
 
             print("Game over: Turn ", str(it), "Result ", str(r))
             board.display(curPlayer)
-        self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
+        # self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
         return r
 
     def playGames(self, num, verbose=False):
@@ -113,12 +123,12 @@ class Arena():
         eps = 0
         maxeps = int(num)
 
-        num = int(num / 2)
+        # num = int(num / 2)
         oneWon = 0
         twoWon = 0
         draws = 0
         for _ in range(num):
-            self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
+            # self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
                 oneWon += 1
@@ -128,11 +138,11 @@ class Arena():
                 draws += 1
             # bookkeeping + plot progress
             eps += 1
-            self.trainExamplesHistory.append(self.iterationTrainExamples)
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                      " => remove the oldest trainExamples")
-                self.trainExamplesHistory.pop(0)
+            # self.trainExamplesHistory.append(self.iterationTrainExamples)
+            # if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+            #     print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+            #           " => remove the oldest trainExamples")
+            #     self.trainExamplesHistory.pop(0)
 
         self.player1, self.player2 = self.player2, self.player1
 
@@ -147,11 +157,11 @@ class Arena():
             # bookkeeping + plot progress
 
 
-            self.trainExamplesHistory.append(self.iterationTrainExamples)
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                      " => remove the oldest trainExamples")
-                self.trainExamplesHistory.pop(0)
+            # self.trainExamplesHistory.append(self.iterationTrainExamples)
+            # if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+            #     print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+            #           " => remove the oldest trainExamples")
+            #     self.trainExamplesHistory.pop(0)
 
 
 
@@ -175,10 +185,10 @@ class Board():
             # arr1[5][1] = -1
             # second plane - number of pieces for player 1
             arr2 = np.array([[0. for y in range(7)] for x in range(7)])
-            arr2[3][3] = 1.0  # player/opponent  / 9
+            arr2[3][3] = 9.0  # player/opponent
             # third plane - number of pieces for player 2
             arr3 = np.array([[0. for y in range(7)] for x in range(7)])
-            arr3[3][3] = 1.0  # player/opponent / 9
+            arr3[3][3] = 9.0  # player/opponent
             # fourth plane - flag is current player must capture
             arr4 = np.array([[0. for y in range(7)] for x in range(7)])
             arr4[3][3] = 0.0
@@ -217,33 +227,33 @@ class Board():
 
     def getPlayerCount(self, player):
         if player == 1:
-            return int(round(self.internalArray[1][3][3] * 9))
+            return int(round(self.internalArray[1][3][3]))
         else:
-            return int(round(self.internalArray[2][3][3] * 9))
+            return int(round(self.internalArray[2][3][3]))
 
     def setPlayerCount(self, player, count):
         if player == 1:
-            self.internalArray[1][3][3] = count / 9
+            self.internalArray[1][3][3] = count
         else:
-            self.internalArray[2][3][3] = count / 9
+            self.internalArray[2][3][3] = count
 
     def getOpponentCount(self, player):
         if player == 1:
-            return int(round(self.internalArray[2][3][3] * 9))
+            return int(round(self.internalArray[2][3][3]))
         else:
-            return int(round(self.internalArray[1][3][3] * 9))
+            return int(round(self.internalArray[1][3][3]))
 
     def setOpponentCount(self, player, count):
         if player == 1:
-            self.internalArray[2][3][3] = count / 9
+            self.internalArray[2][3][3] = count
         else:
-            self.internalArray[1][3][3] = count / 9
+            self.internalArray[1][3][3] = count
 
     def getBoardStatus(self):
-        return int(round(self.internalArray[3][3][3] * 100))
+        return int(round(self.internalArray[3][3][3]))
 
     def setBoardStatus(self, status):
-        self.internalArray[3][3][3] = status / 100
+        self.internalArray[3][3][3] = status
 
     def display(self, current_player, mcts = None, invariant=1):
         n = self.internalArray.shape[1]
@@ -293,6 +303,17 @@ class Board():
         for _ in range(n):
             print("-", end="-")
         print("--")
+
+    def getShortString(self):
+        hh = ''
+        for (x, y) in Game.validPositions:
+            if self.getPosition((x, y)) == 1:
+                hh += "x"
+            elif self.getPosition((x, y)) == -1:
+                hh += "o"
+            else:
+                hh += "_"
+        return hh
 
     def __repr__(self):
         hh = ''
@@ -514,10 +535,16 @@ class Game():
             pos = Game.validPositions[action]
             # make sure we start from player
             if board.getPosition(orig) != player:
+                print(f"not player at {pos}")
+                print(str(board))
+                board.display(player)
                 aaa = 3
             assert (board.getPosition(orig) == player)
             # make sure it's empty
             if board.getPosition(pos) != 0:
+                print(f"not empty for {pos}")
+                print(str(board))
+                board.display(player)
                 aaa = 3
             assert (board.getPosition(pos) == 0)
 
@@ -638,9 +665,9 @@ class Game():
 
         player_no = board.getPlayerCount(player)
 
-        if boardStatus != 0 and player == 1:
+        if boardStatus != 0:
             # select those actions that originate in the stored position
-
+            boardStatus = boardStatus * player
             if player_no > 3: #move
                 # (x, y) = Game.validPositions[boardStatus - 1]
                 # result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
@@ -948,10 +975,15 @@ class NeuralNet():
         self.board_x = 7
         self.board_y = 7
 
-        # Neural Net
-        self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
+        # Neural Net - version with long form of board including status and number of pieces
+        # self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
+        # x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
 
-        x_image = Reshape((self.board_x, self.board_y, 4))(self.input_boards)  # batch_size  x board_x x board_y x 4
+        self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
+        x_image = BatchNormalization(axis=3)(
+            Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
+
+
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
             Conv2D(args.num_channels, 5, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
         h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
@@ -1087,6 +1119,7 @@ class Coach():
 
             counts = self.mcts.getActionProb(canonicalBoard, temp=temp)
             retry = False
+            allLegalMovesUsed = False
             while True:
                 if temp == 0:
                     bestA = np.argmax(counts)
@@ -1109,8 +1142,9 @@ class Coach():
                     NRs[s] = 1
                 else:
                     NRs[s] += 1
-
-                if NRs[s] < 2 and episodeStep < 1000:
+                if episodeStep > 1000:
+                    return []
+                if NRs[s] < 2:
                     for b, p in sym:
                         trainExamples.append([b.internalArray, self.curPlayer, p, None])
                     break
@@ -1125,9 +1159,15 @@ class Coach():
                     # result = [Game.validPositions.index(x) for x in result]
                     if np.sum(counts) == 0:
                         other_moves = self.game.getValidMoves(board, self.curPlayer)
-                        if other_moves is []:
+                        if other_moves is [] or allLegalMovesUsed:
                             return []
+                        allLegalMovesUsed = True
                         print("Retry all legal moves")
+                        print(other_moves)
+                        xxx = list(filter(lambda x: other_moves[x] != 0, [i for i in range(self.game.getActionSize())]))
+                        print(xxx)
+                        if len(xxx) == 1:
+                            break
                         counts = other_moves
                     else:
                         retry = True
@@ -1202,7 +1242,6 @@ class Coach():
 
             if trainExamples != []:
                     self.nnet.train(trainExamples)
-                    # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
             # nmcts = MCTS(self.game, self.nnet, self.args)
             #
             # print('PITTING AGAINST PREVIOUS VERSION')
@@ -1313,17 +1352,17 @@ if __name__ == "__main__":
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
         'numMCTSSims': 25,
-        'arenaCompare': 2,
+        'arenaCompare': 1,
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no20.neural.data',
+        'filename' : 'no22.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 200,
+        'numItersForTrainExamplesHistory': 20,
 
-        'lr': 0.0001,
+        'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 20,
+        'epochs': 10,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
@@ -1336,12 +1375,12 @@ if __name__ == "__main__":
     #play
     #function
     # otherPlayer = HumanPlayer(g).play
-    # otherPlayer = RandomPlayer(g).play
-    # mcts = MCTS(g,n, args)
-    # neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
-    # a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
-    # result = a.playGames(10, verbose=False)
-    #
+    otherPlayer = RandomPlayer(g).play
+    mcts = MCTS(g,n, args)
+    neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+    a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
+    result = a.playGames(10, verbose=True)
+
     # trainExamples = []
     # for e in a.trainExamplesHistory:
     #     trainExamples.extend(e)
@@ -1350,10 +1389,10 @@ if __name__ == "__main__":
     #     shuffle(trainExamples)
     #     n.train(trainExamples)
     #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
-    # print(result)
+    print(result)
     #train
-    c = Coach(g, n, args)
-    c.learn()
+    # c = Coach(g, n, args)
+    # c.learn()
     # m = MCTS2(g, n, args)
     # m.policyIterSP()
     print("moara")
