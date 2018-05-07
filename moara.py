@@ -6,7 +6,7 @@ from random import shuffle
 
 import numpy as np
 from keras import Input, Model
-from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout
+from keras.layers import Reshape, Activation, Conv2D, BatchNormalization, Flatten, Dense, Dropout, LSTM, ConvLSTM2D, GRU
 from keras.optimizers import Adam
 import matplotlib.pyplot as plt
 
@@ -71,8 +71,8 @@ class Arena():
                     board.display(1)
                     print(str(board))
                     assert valids[action] > 0
-            # p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
-            # trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
+            p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
+            trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
             while True:
                 new_board, new_curPlayer = self.game.getNextState(board, curPlayer, action)
 
@@ -100,12 +100,12 @@ class Arena():
             r = self.game.getGameEnded(board, 1)
             if verbose:
                 print(f"Turn {it:03d} {str(board)} Player {curPlayer}")
-                # board.display(1)
+                board.display(1)
         if verbose:
 
             print("Game over: Turn ", str(it), "Result ", str(r))
             board.display(curPlayer)
-        # self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
+        self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
         return r
 
     def playGames(self, num, verbose=False):
@@ -128,7 +128,7 @@ class Arena():
         twoWon = 0
         draws = 0
         for _ in range(num):
-            # self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
+            self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
                 oneWon += 1
@@ -138,11 +138,11 @@ class Arena():
                 draws += 1
             # bookkeeping + plot progress
             eps += 1
-            # self.trainExamplesHistory.append(self.iterationTrainExamples)
-            # if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-            #     print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-            #           " => remove the oldest trainExamples")
-            #     self.trainExamplesHistory.pop(0)
+            self.trainExamplesHistory.append(self.iterationTrainExamples)
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
 
         self.player1, self.player2 = self.player2, self.player1
 
@@ -157,11 +157,11 @@ class Arena():
             # bookkeeping + plot progress
 
 
-            # self.trainExamplesHistory.append(self.iterationTrainExamples)
-            # if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-            #     print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-            #           " => remove the oldest trainExamples")
-            #     self.trainExamplesHistory.pop(0)
+            self.trainExamplesHistory.append(self.iterationTrainExamples)
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
 
 
 
@@ -895,7 +895,6 @@ class MCTS():
             # v = [abs(np.random.randn() * 0.1)]
 
             validMoves = self.game.getValidMoves(canonicalBoard, 1)
-
             ps = ps * validMoves  # masking invalid moves
             sum_Ps_s = np.sum(ps)
             if sum_Ps_s > 0:
@@ -906,6 +905,9 @@ class MCTS():
                 # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
                 # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.
                 print("All valid moves were masked, do workaround.")
+                print(canonicalBoard)
+                print(ps)
+                print(validMoves)
                 ps = ps + validMoves
                 ps /= np.sum(ps)
             self.Ps[s] = ps
@@ -984,19 +986,18 @@ class NeuralNet():
             Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
 
 
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
-            Conv2D(args.num_channels, 5, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
-            Conv2D(args.num_channels, 5, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 5, padding='same')(
-            h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 5, padding='valid')(
-            h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(x_image)))  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        # h_lstm = GRU(32)(h_conv4)
         h_conv4_flat = Flatten()(h_conv4)
+        # h_conv4_flat_2 = Flatten()(h_conv4_flat)
+
         s_fc1 = Dropout(args.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
         s_fc2 = Dropout(args.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(h_conv4_flat))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
@@ -1133,8 +1134,8 @@ class Coach():
 
 
                 action = np.random.choice(len(probs), p=probs)
-                if retry:
-                    print(f"Retry action {action}")
+                # if retry:
+                #     print(f"Retry action {action}")
                 new_board, new_Player = self.game.getNextState(board, self.curPlayer, action)
 
                 s = str(new_board.getCanonicalForm(new_Player))
@@ -1151,9 +1152,9 @@ class Coach():
                 else:
                     #remove action from list and retry next action
                     counts[action] = 0
-                    print(f"Action {action} tried too many times. Retry...")
+                    # print(f"Action {action} tried too many times. Retry...")
                     xxx = list(filter(lambda x: counts[x] != 0, [i for i in range(self.game.getActionSize())]))
-                    print(xxx)
+                    # print(xxx)
                     # result = list(
                     #     filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
                     # result = [Game.validPositions.index(x) for x in result]
@@ -1162,10 +1163,10 @@ class Coach():
                         if other_moves is [] or allLegalMovesUsed:
                             return []
                         allLegalMovesUsed = True
-                        print("Retry all legal moves")
-                        print(other_moves)
+                        # print("Retry all legal moves")
+                        # print(other_moves)
                         xxx = list(filter(lambda x: other_moves[x] != 0, [i for i in range(self.game.getActionSize())]))
-                        print(xxx)
+                        # print(xxx)
                         if len(xxx) == 1:
                             break
                         counts = other_moves
@@ -1356,13 +1357,13 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no22.neural.data',
+        'filename' : 'no25.neural.data',
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 20,
+        'numItersForTrainExamplesHistory': 50,
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 10,
+        'epochs': 20,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 256,
@@ -1375,12 +1376,12 @@ if __name__ == "__main__":
     #play
     #function
     # otherPlayer = HumanPlayer(g).play
-    otherPlayer = RandomPlayer(g).play
-    mcts = MCTS(g,n, args)
-    neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
-    a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
-    result = a.playGames(10, verbose=True)
-
+    # # otherPlayer = RandomPlayer(g).play
+    # mcts = MCTS(g,n, args)
+    # neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+    # a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
+    # result = a.playGames(10, verbose=True)
+    #
     # trainExamples = []
     # for e in a.trainExamplesHistory:
     #     trainExamples.extend(e)
@@ -1389,10 +1390,10 @@ if __name__ == "__main__":
     #     shuffle(trainExamples)
     #     n.train(trainExamples)
     #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
-    print(result)
+    # print(result)
     #train
-    # c = Coach(g, n, args)
-    # c.learn()
+    c = Coach(g, n, args)
+    c.learn()
     # m = MCTS2(g, n, args)
     # m.policyIterSP()
     print("moara")
