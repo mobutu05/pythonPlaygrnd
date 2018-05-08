@@ -85,11 +85,14 @@ class Arena():
                 if NRs[s] < 2 and it < 1000:
                     break
                 else:
-                    print(f"Action {action} lead to duplicate positions")
+                    if verbose:
+                        print(f"Action {action} lead to duplicate positions")
                     xxx = list(filter(lambda x: valids[x] != 0, [i for i in range(self.game.getActionSize())]))
-                    print(xxx)
+                    if verbose:
+                        print(xxx)
                     action = np.random.choice(xxx)
-                    print(f"Randomly select {action}")
+                    if verbose:
+                        print(f"Randomly select {action}")
                     # if len(xxx) == 1:
                     #     break
                     break
@@ -127,7 +130,7 @@ class Arena():
         oneWon = 0
         twoWon = 0
         draws = 0
-        for _ in range(num):
+        for i in range(num):
             self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
@@ -140,13 +143,14 @@ class Arena():
             eps += 1
             self.trainExamplesHistory.append(self.iterationTrainExamples)
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                      " => remove the oldest trainExamples")
+                # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
+            print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
 
         self.player1, self.player2 = self.player2, self.player1
 
-        for _ in range(num):
+        for i in range(num):
             gameResult = self.playGame(verbose=verbose)
             if gameResult == -1:
                 oneWon += 1
@@ -155,16 +159,14 @@ class Arena():
             else:
                 draws += 1
             # bookkeeping + plot progress
+            print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
 
 
             self.trainExamplesHistory.append(self.iterationTrainExamples)
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                      " => remove the oldest trainExamples")
+                # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
-
-
-
 
         return oneWon, twoWon, draws
 
@@ -613,6 +615,19 @@ class Game():
                        form of the board and the corresponding pi vector. This
                        is used when training the neural network from examples.
         """
+        # mirror, rotational
+        # pi_board = np.reshape(pi[:-1], (self.n, self.n))
+        # l = []
+        #
+        # for i in range(1, 5):
+        #     for j in [True, False]:
+        #         newB = np.rot90(board, i)
+        #         newPi = np.rot90(pi_board, i)
+        #         if j:
+        #             newB = np.fliplr(newB)
+        #             newPi = np.fliplr(newPi)
+        #         l += [(newB, list(newPi.ravel()) + [pi[-1]])]
+        # return l
         return [(board, pi)]
 
     def isMill(self, board, mill, player):
@@ -652,7 +667,7 @@ class Game():
             if len(result) > 0:
                 return result  # else choose another move
             else:
-                print("can't capture")
+                # print("can't capture")
                 # board.setBoardStatus(0)
                 boardStatus = 0
         # move piece, select destination, phase 2 or 3
@@ -987,23 +1002,35 @@ class NeuralNet():
 
 
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
-        # h_lstm = GRU(32)(h_conv4)
-        h_conv4_flat = Flatten()(h_conv4)
-        # h_conv4_flat_2 = Flatten()(h_conv4_flat)
+        h_conv11 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        # h_conv12 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv11)))  # batch_size  x board_x x board_y x num_channels
+
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv11)))  # batch_size  x board_x x board_y x num_channels
+        h_conv21 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv2)))  # batch_size  x board_x x board_y x num_channels
+        # h_conv22 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv21)))  # batch_size  x board_x x board_y x num_channels
+
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv21)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv31 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv3)))  # batch_size  x (board_x) x (board_y) x num_channels
+        # h_conv32 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv31)))  # batch_size  x (board_x) x (board_y) x num_channels
+
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv31)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv41 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv4)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        # h_conv42 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv41)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv4_flat = Flatten()(h_conv41)
+
+
+
 
         s_fc1 = Dropout(args.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        s_fc2 = Dropout(args.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(h_conv4_flat))))  # batch_size x 1024
-        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
-        self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
+        # s_fc2 = Dropout(args.dropout)(
+        #     Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc1)  # batch_size x self.action_size
+        self.v = Dense(1, activation='tanh', name='v')(s_fc1)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'],
-                           loss_weights=[1., 10.], optimizer=Adam(args.lr))
+                           loss_weights=[1., 5.], optimizer=Adam(args.lr))
         print(self.model.summary())
 
     def evaluate(self, examples):
@@ -1104,7 +1131,6 @@ class Coach():
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
     def executeEpisode(self):
-
         trainExamples = []
         board = self.game.getInitBoard()
         self.curPlayer = 1
@@ -1193,6 +1219,26 @@ class Coach():
             if r != 0:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
 
+    def test(self):
+        #test against a random
+
+        otherPlayer = RandomPlayer(g).play
+        mcts = MCTS(g,n, args)
+        neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+        a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
+        result = a.playGames(2, verbose=False)
+
+        # trainExamples = []
+        # for e in a.trainExamplesHistory:
+        #     trainExamples.extend(e)
+        # for i in range(args.numIters // 10):
+        #     print(f"ITERATION {i}")
+        #     shuffle(trainExamples)
+        #     n.train(trainExamples)
+        #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
+        print(result)
+        pass
+
     def learn(self):
         # # how many iterations
         # for i in range(5):
@@ -1260,6 +1306,8 @@ class Coach():
             # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
 
             self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
+
+            self.test()
 
     def saveTrainExamples(self, iteration):
         # folder = self.args.checkpoint
@@ -1357,7 +1405,10 @@ if __name__ == "__main__":
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
-        'filename' : 'no25.neural.data',
+        # 'filename' : 'no27.neural.data',#2-2-2-2-2
+        # 'filename': 'no28.neural.data',  # 3-3-3-3-3
+        # 'filename': 'no32.neural.data',  # 1
+        'filename' : 'no34.neural.data',#2-2-2-2-2
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 50,
 
