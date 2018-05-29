@@ -73,6 +73,7 @@ class Arena():
                     assert valids[action] > 0
             p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
             trainExamples.append([canonicalBoard.internalArray, curPlayer, p])
+            validActions = list(filter(lambda x: valids[x] != 0, [i for i in range(self.game.getActionSize())]))
             while True:
                 new_board, new_curPlayer = self.game.getNextState(board, curPlayer, action)
 
@@ -87,23 +88,28 @@ class Arena():
                 else:
                     if verbose:
                         print(f"Action {action} lead to duplicate positions")
-                    xxx = list(filter(lambda x: valids[x] != 0, [i for i in range(self.game.getActionSize())]))
-                    if verbose:
-                        print(xxx)
-                    action = np.random.choice(xxx)
+                        print(validActions)
+                    if len(validActions) > 1:
+                        validActions.remove(action)
+                    action = np.random.choice(validActions)
                     if verbose:
                         print(f"Randomly select {action}")
-                    # if len(xxx) == 1:
-                    #     break
-                    break
+                    if len(validActions) <= 1:
+                        break
+                    # if s not in NRs or NRs[s] < 2:
+                    #     pass
+                    # else:
+                    #     print(f"Action {action} also lead to duplicate position. Retry")
 
 
             board = new_board
             curPlayer = new_curPlayer
             r = self.game.getGameEnded(board, 1)
+            if it > 1000:
+                r = 0.001
             if verbose:
                 print(f"Turn {it:03d} {str(board)} Player {curPlayer}")
-                board.display(1)
+                # board.display(1)
         if verbose:
 
             print("Game over: Turn ", str(it), "Result ", str(r))
@@ -130,13 +136,20 @@ class Arena():
         oneWon = 0
         twoWon = 0
         draws = 0
+        inverse = False
         for i in range(num):
             self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
-                oneWon += 1
+                if inverse:
+                    twoWon += 1
+                else:
+                    oneWon += 1
             elif gameResult == -1:
-                twoWon += 1
+                if not inverse:
+                    twoWon += 1
+                else:
+                    oneWon += 1
             else:
                 draws += 1
             # bookkeeping + plot progress
@@ -148,25 +161,28 @@ class Arena():
                 self.trainExamplesHistory.pop(0)
             print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
 
-        self.player1, self.player2 = self.player2, self.player1
-
-        for i in range(num):
-            gameResult = self.playGame(verbose=verbose)
-            if gameResult == -1:
-                oneWon += 1
-            elif gameResult == 1:
-                twoWon += 1
-            else:
-                draws += 1
-            # bookkeeping + plot progress
-            print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
-
-
-            self.trainExamplesHistory.append(self.iterationTrainExamples)
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                #       " => remove the oldest trainExamples")
-                self.trainExamplesHistory.pop(0)
+            self.player1, self.player2 = self.player2, self.player1
+            inverse = not inverse
+            # oneWon, twoWon = twoWon, oneWon
+            if oneWon > num/2 or twoWon > num/2:
+                break
+        # for i in range(num):
+        #     gameResult = self.playGame(verbose=verbose)
+        #     if gameResult == -1:
+        #         oneWon += 1
+        #     elif gameResult == 1:
+        #         twoWon += 1
+        #     else:
+        #         draws += 1
+        #     # bookkeeping + plot progress
+        #     print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
+        #
+        #
+        #     self.trainExamplesHistory.append(self.iterationTrainExamples)
+        #     if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+        #         # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+        #         #       " => remove the oldest trainExamples")
+        #         self.trainExamplesHistory.pop(0)
 
         return oneWon, twoWon, draws
 
@@ -257,7 +273,7 @@ class Board():
     def setBoardStatus(self, status):
         self.internalArray[3][3][3] = status
 
-    def display(self, current_player, mcts = None, invariant=1):
+    def display(self, current_player, invariant=1):
         n = self.internalArray.shape[1]
         print("")
         print("   ", end="")
@@ -335,7 +351,7 @@ class Board():
         return hh
 
 
-class Game():
+class Game:
     """
     This class specifies the base Game class. To define your own game, subclass
     this class and implement the functions below. This works when the game is
@@ -486,7 +502,7 @@ class Game():
             else:
                 move = Game.validPositions[action]
                 if board.getPosition(move) != -player:
-                    board.display(player)
+                    # board.display(player)
                     board.setBoardStatus(0)
 
 
@@ -503,13 +519,11 @@ class Game():
                     pos = move[0]  # from
                     if board.getPosition(pos) != player:
                         board.display(player)
-                        aaa = 0
                     assert (board.getPosition(pos) == player)
                     board.setPosition(pos, 0)
                     pos = move[1]  # to
                     if board.getPosition(pos) != 0:
                         board.display(player)
-                        aaa = 0
                     assert (board.getPosition(pos) == 0)
                     board.setPosition(pos, player)
                 elif player_no == 3:
@@ -810,7 +824,7 @@ class MCTS():
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        NRs = {}  # clean counter for each move
+
         for i in range(self.args.numMCTSSims):
             # print(" ")
             # print(" ")
@@ -818,6 +832,7 @@ class MCTS():
             # print(".")
 
             #number of times each state occurs during this tree search
+            NRs = {}  # clean counter for each move
             self.search_counter = i
             v = self.search(canonicalBoard, NRs)
             self.deep = 0
@@ -880,7 +895,9 @@ class MCTS():
             local_history[s] = 1
         else:
             local_history[s] += 1
-
+        if local_history[s] > 2:
+            # print("draw")
+            return 0.001 #draw through repetition
 
 
         self.deep += 1
@@ -899,12 +916,13 @@ class MCTS():
             # terminal node
             return -self.Es[s]
 
-        if s not in self.Ps or local_history[s] > 1:
+        if s not in self.Ps or local_history[s] > 3:
             # leaf node
 
             ps, v = self.nnet.predict(canonicalBoard)
-            if local_history[s] > 1:
-                return -v[0]
+            # if local_history[s] > 1:
+            #     return -v[0]
+
             # ps =np.array([1.0 for x in range(self.game.getActionSize())])
             # ps  = 0.1 * abs(np.random.randn(self.game.getActionSize()))
             # v = [abs(np.random.randn() * 0.1)]
@@ -986,47 +1004,77 @@ class NeuralNet():
     See othello/NNet.py for an example implementation.
     """
 
-    def __init__(self, game, args):
+    def __init__(self, game, version, args):
         self.args = args
         self.action_size = game.getActionSize()
         self.board_x = 7
         self.board_y = 7
 
+
         # Neural Net - version with long form of board including status and number of pieces
         # self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
         # x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
-
         self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
+        if version == 36:
+            self.InitVersion36()
+        else:
+            self.InitVersion37()
+
+
+    def InitVersion36(self):
         x_image = BatchNormalization(axis=3)(
             Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
 
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 2)(x_image)))  # batch_size  x board_x x board_y x num_channels
+        h_conv11 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 1)(h_conv1)))  # batch_size  x board_x x board_y x num_channels
 
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv11 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        # h_conv12 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv11)))  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 2)(h_conv11)))  # batch_size  x board_x x board_y x num_channels
+        h_conv21 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 1)(h_conv2)))  # batch_size  x board_x x board_y x num_channels
 
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv11)))  # batch_size  x board_x x board_y x num_channels
-        h_conv21 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv2)))  # batch_size  x board_x x board_y x num_channels
-        # h_conv22 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv21)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 2)(h_conv21)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv31 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 1)(h_conv3)))  # batch_size  x (board_x) x (board_y) x num_channels
 
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv21)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv31 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv3)))  # batch_size  x (board_x) x (board_y) x num_channels
-        # h_conv32 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv31)))  # batch_size  x (board_x) x (board_y) x num_channels
-
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 2)(h_conv31)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
-        h_conv41 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv4)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
-        # h_conv42 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 1)(h_conv41)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 2)(h_conv31)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv41 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 1)(h_conv4)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv41)
-
-
-
 
         s_fc1 = Dropout(args.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        # s_fc2 = Dropout(args.dropout)(
-        #     Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
-        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc1)  # batch_size x self.action_size
-        self.v = Dense(1, activation='tanh', name='v')(s_fc1)  # batch_size x 1
+        s_fc2 = Dropout(args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
+        self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
+
+        self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
+        self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'],
+                           loss_weights=[1., 5.], optimizer=Adam(args.lr))
+        print(self.model.summary())
+
+    def InitVersion37(self):
+        x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 1
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
+            Conv2D(args.num_channels, 3, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 3, padding='same')(
+            h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(args.num_channels, 3, padding='valid')(
+            h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv4_flat = Flatten()(h_conv4)
+        s_fc1 = Dropout(args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
+        s_fc2 = Dropout(args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
+        self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'],
@@ -1096,11 +1144,12 @@ class NeuralNet():
         pi, v = self.model.predict(board)
         return pi[0], v[0]
 
-    def save_checkpoint(self, folder, filename):
+    def save_checkpoint(self, folder, filename_no):
         """
         Saves the current neural network (with its parameters) in
         folder/filename
         """
+        filename = f"no{filename_no}.neural.data"
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             print("Checkpoint Directory does not exist! Making directory {}".format(folder))
@@ -1109,10 +1158,12 @@ class NeuralNet():
             print("Checkpoint Directory exists! ")
         self.model.save_weights(filepath)
 
-    def load_checkpoint(self, folder, filename):
+    def load_checkpoint(self, folder, filename_no):
         """
         Loads parameters of the neural network from folder/filename
         """
+        'no37.neural.data'
+        filename = f"no{filename_no}.neural.data"
         filepath = os.path.join(folder, filename)
         if os.path.exists(filepath):
             self.model.load_weights(filepath)
@@ -1124,7 +1175,7 @@ class Coach():
     def __init__(self, game, nnet, args):
         self.game = game
         self.nnet = nnet
-        self.pnet = self.nnet.__class__(self.game, args)  # the competitor network
+        self.pnet  = None
         self.args = args
         self.mcts = MCTS(self.game, self.nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
@@ -1147,6 +1198,8 @@ class Coach():
             counts = self.mcts.getActionProb(canonicalBoard, temp=temp)
             retry = False
             allLegalMovesUsed = False
+            draw = False
+
             while True:
                 if temp == 0:
                     bestA = np.argmax(counts)
@@ -1169,9 +1222,9 @@ class Coach():
                     NRs[s] = 1
                 else:
                     NRs[s] += 1
-                if episodeStep > 1000:
+                if episodeStep > 300:
                     return []
-                if NRs[s] < 2:
+                if NRs[s] < 4:
                     for b, p in sym:
                         trainExamples.append([b.internalArray, self.curPlayer, p, None])
                     break
@@ -1198,6 +1251,9 @@ class Coach():
                         counts = other_moves
                     else:
                         retry = True
+                    # print("Draw")
+                    # draw = True
+                    # break
 
 
 
@@ -1213,11 +1269,27 @@ class Coach():
                 print(f"{episodeStep:003d}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
-
+            if draw:
+                r = 0.001 #draw
             # if episodeStep > 3000:
             #     r = 0
             if r != 0:
                 return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
+
+    def PitAgainst(self, neuralDataFileNumber):
+
+        # self.pnet = self.nnet.__class__(self.game, args)  # the competitor network
+        if self.pnet is None:
+            self.pnet = NeuralNet(g, 37, args)
+        self.pnet.load_checkpoint(folder=self.args.checkpoint, filename_no=neuralDataFileNumber)
+        pmcts = MCTS(self.game, self.pnet, self.args)
+        nmcts = MCTS(self.game, self.nnet, self.args)
+
+        print(f'PITTING AGAINST {neuralDataFileNumber}')
+        arena = Arena(lambda x: np.argmax(nmcts.getActionProb(x, temp=0)),
+                      lambda x: np.argmax(pmcts.getActionProb(x, temp=0)), self.game, self.args)
+        nwins, pwins, draws = arena.playGames(self.args.arenaCompare, verbose=True)
+        print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
 
     def test(self):
         #test against a random
@@ -1249,7 +1321,7 @@ class Coach():
         #     pass
         # pass
 
-        for i in range(1, self.args.numIters + 1):
+        for i in range(0, self.args.numIters + 1):
             # bookkeeping
             print('------ITER ' + str(i) + '------')
             # examples of the iteration
@@ -1258,14 +1330,16 @@ class Coach():
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
                 for eps in range(self.args.numEps):
+                    print(f"----- Episode {eps} -----")
                     self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
                     example = self.executeEpisode()
                     if example != []:
                         iterationTrainExamples += example
                 # self.nnet.evaluate(iterationTrainExamples)
                 # save the iteration examples to the history
-                        self.trainExamplesHistory.append(iterationTrainExamples)
+                self.trainExamplesHistory.append(iterationTrainExamples)
 
+            print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
             if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
                 print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                       " => remove the oldest trainExamples")
@@ -1279,35 +1353,16 @@ class Coach():
             for e in self.trainExamplesHistory:
                 trainExamples.extend(e)
             shuffle(trainExamples)
-
-            # training new network, keeping a copy of the old one
-
-            # self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
-            # pmcts = MCTS(self.game, self.pnet, self.args)
-
-
-
             if trainExamples != []:
-                    self.nnet.train(trainExamples)
-            # nmcts = MCTS(self.game, self.nnet, self.args)
-            #
-            # print('PITTING AGAINST PREVIOUS VERSION')
-            # arena = Arena(lambda x: np.argmax(pmcts.getActionProb(x, temp=0)),
-            #               lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game, self.args)
-            # pwins, nwins, draws = arena.playGames(self.args.arenaCompare, verbose=True)
-            #
-            # print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
-            # if pwins + nwins > 0 and float(nwins) / (pwins + nwins) < self.args.updateThreshold:
-            #     print('REJECTING NEW MODEL')
-            #     self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
-            # else:
-            #     print('ACCEPTING NEW MODEL')
-            #     self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
-            # self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.neuralnet.data')
+                self.nnet.train(trainExamples)
 
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=args.filename)
+                #test against the best no36
+                if i % 5 == 0:
+                    # self.PitAgainst('no36.neural.data-ITER-390')
+                    self.PitAgainst(args.filename - 1)
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
 
-            self.test()
+            # self.test()
 
     def saveTrainExamples(self, iteration):
         # folder = self.args.checkpoint
@@ -1396,33 +1451,38 @@ class RandomPlayer():
 if __name__ == "__main__":
     args = dotdict({
         'numIters': 1000,
-        'numEps': 1,
-        'tempThreshold': 50,
+        'numEps': 2,
+        'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
         'numMCTSSims': 25,
-        'arenaCompare': 1,
+        'arenaCompare': 9,
         'cpuct': 1,
         'checkpoint': './temp/',
         'load_model': False,
         # 'filename' : 'no27.neural.data',#2-2-2-2-2
         # 'filename': 'no28.neural.data',  # 3-3-3-3-3
         # 'filename': 'no32.neural.data',  # 1
-        'filename' : 'no34.neural.data',#2-2-2-2-2
-        'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 50,
 
-        'lr': 0.001,
+
+        # 'filename' : 'no35.neural.data',#2-2-2-2-2
+        'filename': 38,
+
+        # 'filename': 'no37.neural.data',  # 1
+        'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
+        'numItersForTrainExamplesHistory': 20,
+
+        'lr': 0.0001,
         'dropout': 0.3,
-        'epochs': 20,
+        'epochs': 10,
         'batch_size': 64,
         'cuda': True,
-        'num_channels': 256,
+        'num_channels': 512,
 
     })
     g = Game()
-    n = NeuralNet(g, args)
-    n.load_checkpoint(folder=args.checkpoint, filename=args.filename)
+    n = NeuralNet(g, 0, args)
+    n.load_checkpoint(folder=args.checkpoint, filename_no=args.filename)
 
     #play
     #function
@@ -1442,9 +1502,11 @@ if __name__ == "__main__":
     #     n.train(trainExamples)
     #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
     # print(result)
+
     #train
     c = Coach(g, n, args)
     c.learn()
+
     # m = MCTS2(g, n, args)
     # m.policyIterSP()
     print("moara")
