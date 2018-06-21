@@ -350,6 +350,238 @@ class Board():
         hh = hh + str(self.getBoardStatus())  # capture
         return hh
 
+class Board2:
+    def __init__(self, copy_=None):
+        if copy_ is None:
+            self.internalArray = np.array([
+                # first plane - white pieces - time n
+                np.array([[0. for y in range(7)] for x in range(7)]),
+                # first plane - white pieces - time n-1
+                np.array([[0. for y in range(7)] for x in range(7)])
+                # # first plane - white pieces - time n-1
+                # arr2 = np.array([[0. for y in range(7)] for x in range(7)])
+                #
+                #
+                #
+                # arr2 = np.array([[0. for y in range(7)] for x in range(7)])
+                # arr2[3][3] = 9.0  # player/opponent
+                # # third plane - number of pieces for player 2
+                # arr3 = np.array([[0. for y in range(7)] for x in range(7)])
+                # arr3[3][3] = 9.0  # player/opponent
+                # # fourth plane - flag is current player must capture
+                # arr4 = np.array([[0. for y in range(7)] for x in range(7)])
+                # arr4[3][3] = 0.0
+            ])
+        else:
+            self.internalArray = np.copy(copy_)
+
+    def getCanonicalForm(self, player):
+        """
+        Input:
+            board: current board
+            player: current player (1 or -1)
+
+        Returns:
+            canonicalBoard: returns canonical form of board. The canonical form
+                            should be independent of player. For e.g. in chess,
+                            the canonical form can be chosen to be from the pov
+                            of white. When the player is white, we can return
+                            board as is. When the player is black, we can invert
+                            the colors and return the board.
+        """
+        if player == 1:
+            return Board(self.internalArray)
+        else:
+            b = Board(np.array([self.internalArray[0] * player, self.internalArray[2], self.internalArray[1],
+                                self.internalArray[3] * player]))
+            return b
+
+    def setPosition(self, pos, value):
+        (x, y) = pos
+        self.internalArray[0][y][x] = value
+
+    def getPosition(self, pos):
+        (x, y) = pos
+        return self.internalArray[0][y][x]
+
+    def getPlayerCount(self, player):
+        if player == 1:
+            return int(round(self.internalArray[1][3][3]))
+        else:
+            return int(round(self.internalArray[2][3][3]))
+
+    def setPlayerCount(self, player, count):
+        if player == 1:
+            self.internalArray[1][3][3] = count
+        else:
+            self.internalArray[2][3][3] = count
+
+    def getOpponentCount(self, player):
+        if player == 1:
+            return int(round(self.internalArray[2][3][3]))
+        else:
+            return int(round(self.internalArray[1][3][3]))
+
+    def setOpponentCount(self, player, count):
+        if player == 1:
+            self.internalArray[2][3][3] = count
+        else:
+            self.internalArray[1][3][3] = count
+
+    def getBoardStatus(self):
+        return int(round(self.internalArray[3][3][3]))
+
+    def setBoardStatus(self, status):
+        self.internalArray[3][3][3] = status
+
+    def display(self, current_player, invariant=1):
+        n = self.internalArray.shape[1]
+        print("")
+        print("   ", end="")
+        for y in range(n):
+            print(y, "", end="")
+        print("")
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+        for y in range(n):
+            print(y, "|", end="")  # print the row #
+            for x in range(n):
+                piece = self.getPosition((x, y)) * current_player * invariant  # get the piece to print
+                if piece == 1:
+                    print("X ", end="")
+                elif piece == -1:
+                    print("O ", end="")
+                else:
+                    if (y, x) in Game.validPositions:
+                        # if (str(self), Game.validPositions.index((y, x))) in mcts.Qsa:
+                        if x == n:
+                            print(".", end="")
+                        else:
+                            print(". ", end="")
+                            # else:
+                            #     if x == n:
+                            #         print("!", end="")
+                            #     else:
+                            #         print("! ", end="")
+                    else:
+                        if x == 3 and y == 3 and self.getBoardStatus() != 0:
+                            if np.sign(self.getBoardStatus()) == 1:
+                                print(chr(96 + abs(self.getBoardStatus())), end=" ")
+                            else:
+                                print(chr(96 + abs(self.getBoardStatus())), end="-")
+                        elif x == n:
+                            print(" ", end="")
+                        else:
+                            print("  ", end="")
+
+            print("|")
+
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+
+    def getShortString(self):
+        hh = ''
+        for (x, y) in Game.validPositions:
+            if self.getPosition((x, y)) == 1:
+                hh += "x"
+            elif self.getPosition((x, y)) == -1:
+                hh += "o"
+            else:
+                hh += "_"
+        return hh
+
+    def __repr__(self):
+        hh = ''
+        for (x, y) in Game.validPositions:
+            if self.getPosition((x, y)) == 1:
+                hh += "x"
+            elif self.getPosition((x, y)) == -1:
+                hh += "o"
+            else:
+                hh += "_"
+        hh = hh + " "
+        hh = hh + str(self.getPlayerCount(1))  # player
+        hh = hh + " "
+        hh = hh + str(self.getOpponentCount(1))  # opponent
+        hh = hh + " "
+        hh = hh + str(self.getBoardStatus())  # capture
+        return hh
+
+class IGame:
+    def getInitBoard(self):
+        """
+        Returns:
+            startBoard: a representation of the board (ideally this is the form
+                        that will be the input to your neural network)
+        """
+        pass
+
+    def getActionSize(self):
+        """
+        Returns:
+            actionSize: number of all possible actions
+        """
+        pass
+
+    def getNextState(self, board, player, action):
+        """
+        Input:
+            board: current board
+            player: current player (1 or -1)
+            action: action taken by current player
+
+        Returns:
+            nextBoard: board after applying action
+            nextPlayer: player who plays in the next turn (should be -player)
+        """
+        pass
+
+    def getValidMoves(self, board, player):
+        """
+        Input:
+            board: current board
+            player: current player
+
+        Returns:
+            validMoves: a binary vector of length self.getActionSize(), 1 for
+                        moves that are valid from the current board and player,
+                        0 for invalid moves
+        """
+        pass
+
+    def getGameEnded(self, board, player):
+        """
+        Input:
+            board: current board
+            player: current player (1 or -1)
+
+        Returns:
+            r: 0 if game has not ended. 1 if player won, -1 if player lost,
+               small non-zero value for draw.
+
+        """
+        pass
+
+    def getSymmetries(self, board, pi):
+        """
+        Input:
+            board: current board
+            pi: policy vector of size self.getActionSize()
+
+        Returns:
+            symmForms: a list of [(board,pi)] where each tuple is a symmetrical
+                       form of the board and the corresponding pi vector. This
+                       is used when training the neural network from examples.
+        """
+        pass
+
+
+    def getLegalMoves(self, board, player):
+        pass
 
 class Game:
     """
@@ -1472,7 +1704,7 @@ if __name__ == "__main__":
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
         'numItersForTrainExamplesHistory': 20,
 
-        'lr': 0.0001,
+        'lr': 0.001,
         'dropout': 0.3,
         'epochs': 10,
         'batch_size': 64,
