@@ -2,7 +2,7 @@ from keras import Input, Model
 from keras.layers import Reshape, Activation, BatchNormalization, Conv2D, Flatten, Dropout, Dense
 from keras.optimizers import Adam
 from collections import deque
-from progress.bar import Bar
+# from progress.bar import Bar
 import time
 import numpy as np
 import math
@@ -491,7 +491,7 @@ from random import shuffle
 
 
 if __name__ == "__main__":
-    # g = Game()
+    g = Game()
     # nn = NeuralNet(g)
     # c = Coach(g, nn)
     # c.learn()
