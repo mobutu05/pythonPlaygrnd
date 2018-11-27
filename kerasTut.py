@@ -37,7 +37,7 @@ def example1():
     keras.layers.Dense(512, activation='relu')
 
 
-def vectorize_sequences(sequences: object, dimension: object = 10000) -> object:
+def vectorize_sequences(sequences: ndarray, dimension: int = 10000) -> ndarray:
     results = np.zeros((len(sequences), dimension))
     for i, sequence in enumerate(sequences):
         results[i, sequence] = 1.
@@ -51,9 +51,9 @@ train_data: ndarray
 train_labels: ndarray
 test_data: ndarray
 (train_data, train_labels), (test_data, test_labels) = imdb.load_data(num_words=10000)
-x_train: object = vectorize_sequences(train_data)
-x_test = vectorize_sequences(test_data)
-y_train = np.asarray(train_labels).astype('float32')
+x_train: ndarray = vectorize_sequences(train_data)
+x_test: int = vectorize_sequences(test_data)
+y_train: ndarray = np.asarray(train_labels).astype('float32')
 y_test: ndarray = np.asarray(test_labels).astype('float32')
 model: Sequential = models.Sequential()
 model.add(layers.Dense(16, activation='relu', input_shape=(10000,)))
