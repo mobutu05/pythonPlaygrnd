@@ -101,7 +101,6 @@ class Arena():
                     # else:
                     #     print(f"Action {action} also lead to duplicate position. Retry")
 
-
             board = new_board
             curPlayer = new_curPlayer
             r = self.game.getGameEnded(board, 1)
@@ -111,10 +110,9 @@ class Arena():
                 print(f"Turn {it:03d} {str(board)} Player {curPlayer}")
                 # board.display(1)
         if verbose:
-
             print("Game over: Turn ", str(it), "Result ", str(r))
             board.display(curPlayer)
-        self.iterationTrainExamples = [(x[0],x[2],r*((-1)**(x[1]!= curPlayer))) for x in trainExamples]
+        self.iterationTrainExamples = [(x[0], x[2], r * ((-1) ** (x[1] != curPlayer))) for x in trainExamples]
         return r
 
     def playGames(self, num, verbose=False):
@@ -164,7 +162,7 @@ class Arena():
             self.player1, self.player2 = self.player2, self.player1
             inverse = not inverse
             # oneWon, twoWon = twoWon, oneWon
-            if oneWon > num/2 or twoWon > num/2:
+            if oneWon > num / 2 or twoWon > num / 2:
                 break
         # for i in range(num):
         #     gameResult = self.playGame(verbose=verbose)
@@ -188,7 +186,7 @@ class Arena():
 
 
 class Board():
-    def __init__(self, copy_ = None):
+    def __init__(self, copy_=None):
         if copy_ is None:
             # first plane - pieces
             arr1 = np.array([[0 for y in range(7)] for x in range(7)])
@@ -349,6 +347,7 @@ class Board():
         hh = hh + " "
         hh = hh + str(self.getBoardStatus())  # capture
         return hh
+
 
 class Board2:
     def __init__(self, copy_=None):
@@ -511,6 +510,7 @@ class Board2:
         hh = hh + str(self.getBoardStatus())  # capture
         return hh
 
+
 class IGame:
     def getInitBoard(self):
         """
@@ -579,9 +579,9 @@ class IGame:
         """
         pass
 
-
     def getLegalMoves(self, board, player):
         pass
+
 
 class Game:
     """
@@ -693,13 +693,13 @@ class Game:
         Returns:
             actionSize: number of all possible actions
         """
-        return (24 + # fly 1st piece
-        #         24 +  # fly 2nd piece
-        #         24 +  # fly 3rd piece
-        #         24 +  # put piece
-        #         24 +  # capture piece
-            len(self.validActions) + # move piece
-            1)    #pass
+        return (24 +  # fly 1st piece
+                #         24 +  # fly 2nd piece
+                #         24 +  # fly 3rd piece
+                #         24 +  # put piece
+                #         24 +  # capture piece
+                len(self.validActions) +  # move piece
+                1)  # pass
 
     def getNextState(self, board, player, action):
         """
@@ -725,18 +725,17 @@ class Game:
         pieces_on_board = len([0 for pos in Game.validPositions if board.getPosition(pos) == player])
         player_no = board.getPlayerCount(player)
 
-        #pre-selection for capture
+        # pre-selection for capture
         if abs(board.getBoardStatus()) == 100:  # capture
-            #could not capture, but can move
+            # could not capture, but can move
             if action >= 24:
                 board.setBoardStatus(0)
-            #could not capture, but can jump
+            # could not capture, but can jump
             else:
                 move = Game.validPositions[action]
                 if board.getPosition(move) != -player:
                     # board.display(player)
                     board.setBoardStatus(0)
-
 
         # phase 1
         if board.getBoardStatus() == 0:  # select/put piece
@@ -761,9 +760,9 @@ class Game:
                 elif player_no == 3:
                     orig = Game.validPositions[action]
                     assert (board.getPosition(orig) == player)
-                    board.setBoardStatus((action + 1)*player)
+                    board.setBoardStatus((action + 1) * player)
                 else:
-                    assert(False)
+                    assert (False)
         elif abs(board.getBoardStatus()) == 100:  # capture
             # make sure flag is used only once
             # double check
@@ -771,10 +770,9 @@ class Game:
             pos = Game.validPositions[action]
             if board.getPosition(pos) != -player:
                 aaaa = 0
-            assert(board.getPosition(pos) == -player)
+            assert (board.getPosition(pos) == -player)
             board.setPosition(pos, 0)
             board.setOpponentCount(player, board.getOpponentCount(player) - 1)
-
 
             board.setBoardStatus(0)
             pass
@@ -918,7 +916,6 @@ class Game:
                 boardStatus = 0
         # move piece, select destination, phase 2 or 3
 
-
         # pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
         #                                    self.validPositions, 0)
         pieces_on_board = len([0 for pos in self.validPositions if board.getPosition(pos) == player])
@@ -929,7 +926,7 @@ class Game:
         if boardStatus != 0:
             # select those actions that originate in the stored position
             boardStatus = boardStatus * player
-            if player_no > 3: #move
+            if player_no > 3:  # move
                 # (x, y) = Game.validPositions[boardStatus - 1]
                 # result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
                 # result = [x[1] for x in result if board.getPosition(x[1]) == 0]
@@ -962,72 +959,7 @@ class Game:
             result = list(filter(lambda x: board.getPosition(x) == player, Game.validPositions))
             result = [Game.validPositions.index(x) for x in result]
         return result
-'''
-class MCTS2():
 
-    def __init__(self, game, nnet, args):
-        self.game = game
-        self.nnet = nnet
-        self.args = args
-        self.visited = {}
-        self.improvedPolicy = {}
-        self.initialPolicy = {}
-        pass
-
-    def search(self, canonicalBoard):
-        reward = self.game.getGameEnded(canonicalBoard, 1)
-        if reward != 777:
-            return -reward
-        s = str(canonicalBoard)
-        if s not in self.visited:
-            self.visited[s] = 1
-            self.initialPolicy[s], v = self.nnet.predict(canonicalBoard)
-            return -v
-
-        max_u, best_a = -float("inf"), -1
-        for a in range(self.game.getValidMoves(canonicalBoard, 1)):
-            u = Q[s][a] + self.args.c_puct * P[s][a] * math.sqrt(sum(N[s])) / (1 + N[s][a])
-            if u > max_u:
-                max_u = u
-                best_a = a
-        a = best_a
-
-        sp = game.nextState(s, a)
-        v = search(sp, game, nnet)
-
-        Q[s][a] = (N[s][a] * Q[s][a] + v) / (N[s][a] + 1)
-        N[s][a] += 1
-        return -v
-
-    def policyIterSP(self):
-        examples = []
-        for i in range(args.numIters):
-            for e in range(args.numEps):
-                examples += self.executeEpisode()  # collect examples from this game
-
-            self.nnet.train(examples)
-            # frac_win = pit(new_nnet, nnet)  # compare new net with previous net
-            # if frac_win > threshold:
-            #     nnet = new_nnet  # replace with new net
-        # return nnet
-
-    def executeEpisode(self):
-        examples = []
-        player = 1
-        board = self.game.getInitBoard()
-        canonicalBoard = board.getCanonicalForm(player)
-        s = str(canonicalBoard)
-        while True:
-            for _ in range(self.args.numMCTSSims):
-                self.search(canonicalBoard)
-            counts = [self.Nsa[(s, a)] if (s, a) in self.Nsa else 0 for a in range(self.game.getActionSize())]
-            examples.append([s, self.improvedPolicy[s], None])  # rewards can not be determined yet
-            a = np.random.choice(len(self.improvedPolicy[s]), p=self.improvedPolicy[s])  # sample action from improved policy
-            s = self.game.getNextState()
-            if self.game.getGameEnded(s, player):
-                examples = assignRewards(examples, game.gameReward(s))
-                return examples
-'''
 class MCTS():
     """
     This class handles the MCTS tree.
@@ -1047,7 +979,7 @@ class MCTS():
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
-    def getActionProb(self, canonicalBoard, temp=1):
+    def getActionProb(self, canonicalBoard: Board, temperature: object = 1) -> int:
         """
         This function performs numMCTSSims simulations of MCTS starting from
         canonicalBoard.
@@ -1057,15 +989,14 @@ class MCTS():
                    proportional to Nsa[(s,a)]**(1./temp)
         """
 
-        for i in range(self.args.numMCTSSims):
+        for i in range(self.args.numMCTSSimulations):
             # print(" ")
             # print(" ")
             # print(".", end="")
             # print(".")
 
-            #number of times each state occurs during this tree search
+            # number of times each state occurs during this tree search
             NRs = {}  # clean counter for each move
-            self.search_counter = i
             v = self.search(canonicalBoard, NRs)
             self.deep = 0
 
@@ -1129,8 +1060,7 @@ class MCTS():
             local_history[s] += 1
         if local_history[s] > 2:
             # print("draw")
-            return 0.001 #draw through repetition
-
+            return 0.001  # draw through repetition
 
         self.deep += 1
         if self.deep > 1000:
@@ -1187,7 +1117,7 @@ class MCTS():
 
         valid_actions = list(filter(lambda a: valids[a] == 1, range(self.game.getActionSize())))
         # a = valid_actions[0]#choose the first (possibly only) at the beginning
-        #skip actions that would lead to a repeated state...
+        # skip actions that would lead to a repeated state...
         while True:
             a = self.getBestAction(s, valid_actions)
             next_board, next_player = self.game.getNextState(canonicalBoard, 1, a)
@@ -1226,6 +1156,7 @@ class MCTS():
         self.Ns[s] += 1
         return -v
 
+
 class NeuralNet():
     """
     This class specifies the base NeuralNet class. To define your own neural
@@ -1242,7 +1173,6 @@ class NeuralNet():
         self.board_x = 7
         self.board_y = 7
 
-
         # Neural Net - version with long form of board including status and number of pieces
         # self.input_boards = Input(shape=(4, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
         # x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 4
@@ -1251,7 +1181,6 @@ class NeuralNet():
             self.InitVersion36()
         else:
             self.InitVersion37()
-
 
     def InitVersion36(self):
         x_image = BatchNormalization(axis=3)(
@@ -1291,7 +1220,8 @@ class NeuralNet():
         print(self.model.summary())
 
     def InitVersion37(self):
-        x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 1
+        x_image = BatchNormalization(axis=3)(
+            Reshape((self.board_x, self.board_y, 4))(self.input_boards))  # batch_size  x board_x x board_y x 1
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(
             Conv2D(args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
         h_conv2 = Activation('relu')(BatchNormalization(axis=3)(
@@ -1321,7 +1251,7 @@ class NeuralNet():
         a = self.model.evaluate(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size, verbose=1)
 
         print(a)
-        #print(b)
+        # print(b)
 
     def train(self, examples):
         """
@@ -1342,7 +1272,7 @@ class NeuralNet():
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
         result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
-                       epochs = self.args.epochs, validation_split = 0.1)
+                                epochs=self.args.epochs, validation_split=0.1)
         # for key in result.history.keys():
         #     print(key)
         #     print(result.history[key])
@@ -1407,11 +1337,10 @@ class Coach():
     def __init__(self, game, nnet, args):
         self.game = game
         self.nnet = nnet
-        self.pnet  = None
+        self.pnet = None
         self.args = args
         self.mcts = MCTS(self.game, self.nnet, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
-        self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
     def executeEpisode(self):
         trainExamples = []
@@ -1424,25 +1353,24 @@ class Coach():
         while True:
             episodeStep += 1
             canonicalBoard = board.getCanonicalForm(self.curPlayer)
-            temp = int(episodeStep < self.args.tempThreshold)
+            temperature: int = int(episodeStep < self.args.tempThreshold)
             # temp = 1
 
-            counts = self.mcts.getActionProb(canonicalBoard, temp=temp)
+            counts = self.mcts.getActionProb(canonicalBoard, temperature)
             retry = False
             allLegalMovesUsed = False
             draw = False
 
             while True:
-                if temp == 0:
+                if temperature == 0:
                     bestA = np.argmax(counts)
                     probs = [0] * len(counts)
                     probs[bestA] = 1
                 else:
-                    counts = [x ** (1. / temp) for x in counts]
+                    counts = [x ** (1. / temperature) for x in counts]
                     probs = [x / float(sum(counts)) for x in counts]
 
                 sym = self.game.getSymmetries(canonicalBoard, probs)
-
 
                 action = np.random.choice(len(probs), p=probs)
                 # if retry:
@@ -1461,7 +1389,7 @@ class Coach():
                         trainExamples.append([b.internalArray, self.curPlayer, p, None])
                     break
                 else:
-                    #remove action from list and retry next action
+                    # remove action from list and retry next action
                     counts[action] = 0
                     # print(f"Action {action} tried too many times. Retry...")
                     xxx = list(filter(lambda x: counts[x] != 0, [i for i in range(self.game.getActionSize())]))
@@ -1487,22 +1415,21 @@ class Coach():
                     # draw = True
                     # break
 
-
-
             board = new_board
             self.curPlayer = new_Player
             s = str(canonicalBoard)
             # print(str(episodeStep) + ": " + str(board.getPlayerCount()) + " - " + str(
             #     board.getOpponentCount()))
             # if board.getBoardStatus() == 0:
-                # board.display(1, self.mcts)
+            # board.display(1, self.mcts)
             if (s, action) in self.mcts.Qsa:
                 # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-                print(f"{episodeStep:003d}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
+                print(
+                    f"{episodeStep:003d}: {self.mcts.Qsa[(s, action)] * (-self.curPlayer):+4.2f} : {action:02d} : {board}")
                 dummy = 0
             r = self.game.getGameEnded(board, self.curPlayer)
             if draw:
-                r = 0.001 #draw
+                r = 0.001  # draw
             # if episodeStep > 3000:
             #     r = 0
             if r != 0:
@@ -1524,11 +1451,11 @@ class Coach():
         print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
 
     def test(self):
-        #test against a random
+        # test against a random
 
         otherPlayer = RandomPlayer(g).play
-        mcts = MCTS(g,n, args)
-        neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp = 0))
+        mcts = MCTS(g, n, args)
+        neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp=0))
         a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
         result = a.playGames(2, verbose=False)
 
@@ -1553,80 +1480,83 @@ class Coach():
         #     pass
         # pass
 
-        for i in range(0, self.args.numIters + 1):
+        for i in range(0, self.args.numIterations + 1):
             # bookkeeping
             print('------ITER ' + str(i) + '------')
             # examples of the iteration
-            validation = []
-            if not self.skipFirstSelfPlay or i > 1:
-                iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
-                for eps in range(self.args.numEps):
-                    print(f"----- Episode {eps} -----")
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
-                    example = self.executeEpisode()
-                    if example != []:
-                        iterationTrainExamples += example
-                # self.nnet.evaluate(iterationTrainExamples)
-                # save the iteration examples to the history
-                self.trainExamplesHistory.append(iterationTrainExamples)
+            iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
-            print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                      " => remove the oldest trainExamples")
-                self.trainExamplesHistory.pop(0)
-            # backup history to a file
-            # NB! the examples were collected using the model from the previous iteration, so (i-1)
-            self.saveTrainExamples(i - 1)
+            for episode in range(self.args.numEpisodes):
+                print(f"----- Episode {episode} -----")
+                self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
+                example = self.executeEpisode()
+                if example != []:
+                    iterationTrainExamples += example
+            # self.nnet.evaluate(iterationTrainExamples)
+            # save the iteration examples to the history
+            self.trainExamplesHistory.append(iterationTrainExamples)
 
-            # shuffle examlpes before training
-            trainExamples = []
-            for e in self.trainExamplesHistory:
-                trainExamples.extend(e)
-            shuffle(trainExamples)
-            if trainExamples != []:
-                self.nnet.train(trainExamples)
+        print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
+        if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+            print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                  " => remove the oldest trainExamples")
+            self.trainExamplesHistory.pop(0)
+        # backup history to a file
+        # NB! the examples were collected using the model from the previous iteration, so (i-1)
+        self.saveTrainExamples(i - 1)
 
-                #test against the best no36
-                if i % 5 == 0:
-                    # self.PitAgainst('no36.neural.data-ITER-390')
-                    self.PitAgainst(args.filename - 1)
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
+        # shuffle examlpes before training
+        trainExamples = []
+        for e in self.trainExamplesHistory:
+            trainExamples.extend(e)
+        shuffle(trainExamples)
+        if trainExamples != []:
+            self.nnet.train(trainExamples)
 
-            # self.test()
+            # test against the best no36
+            if i % 5 == 0:
+                # self.PitAgainst('no36.neural.data-ITER-390')
+                self.PitAgainst(args.filename - 1)
+            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
 
-    def saveTrainExamples(self, iteration):
-        # folder = self.args.checkpoint
-        # if not os.path.exists(folder):
-        #     os.makedirs(folder)
-        # filename = os.path.join(folder, self.getCheckpointFile(iteration)+".examples")
-        # with open(filename, "wb+") as f:
-        #     Pickler(f).dump(self.trainExamplesHistory)
-        # f.closed
-        pass
+        # self.test()
 
-    def loadTrainExamples(self):
-        # modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
-        # examplesFile = modelFile+".examples"
-        # if not os.path.isfile(examplesFile):
-        #     print(examplesFile)
-        #     r = input("File with trainExamples not found. Continue? [y|n]")
-        #     if r != "y":
-        #         sys.exit()
-        # else:
-        #     print("File with trainExamples found. Read it.")
-        #     with open(examplesFile, "rb") as f:
-        #         self.trainExamplesHistory = Unpickler(f).load()
-        #     f.closed
-        #     # examples based on the model were already collected (loaded)
-        #     self.skipFirstSelfPlay = True
-        pass
+
+def saveTrainExamples(self, iteration):
+    # folder = self.args.checkpoint
+    # if not os.path.exists(folder):
+    #     os.makedirs(folder)
+    # filename = os.path.join(folder, self.getCheckpointFile(iteration)+".examples")
+    # with open(filename, "wb+") as f:
+    #     Pickler(f).dump(self.trainExamplesHistory)
+    # f.closed
+    pass
+
+
+def loadTrainExamples(self):
+    # modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
+    # examplesFile = modelFile+".examples"
+    # if not os.path.isfile(examplesFile):
+    #     print(examplesFile)
+    #     r = input("File with trainExamples not found. Continue? [y|n]")
+    #     if r != "y":
+    #         sys.exit()
+    # else:
+    #     print("File with trainExamples found. Read it.")
+    #     with open(examplesFile, "rb") as f:
+    #         self.trainExamplesHistory = Unpickler(f).load()
+    #     f.closed
+    #     # examples based on the model were already collected (loaded)
+    #     self.skipFirstSelfPlay = True
+    pass
 
 
 class dotdict(dict):
     def __getattr__(self, name):
         return self[name]
+
+
 class HumanPlayer():
     def __init__(self, game):
         self.game = game
@@ -1635,7 +1565,7 @@ class HumanPlayer():
         # display(board)
         valid = self.game.getValidMoves(board, 1)
 
-        #if pass is required
+        # if pass is required
         if valid[88] == 1:
             return 88
         # for i in range(len(valid)):
@@ -1650,17 +1580,17 @@ class HumanPlayer():
             if len(input_array) == 2:
                 a, b = input_array
                 try:
-                    move = Game.validPositions.index((a,b))
+                    move = Game.validPositions.index((a, b))
                 except:
                     move = 90
             elif len(input_array) == 4:
                 a, b, c, d = input_array
                 try:
-                    move = 24 + Game.validActions.index(((a, b),(c,d)))
+                    move = 24 + Game.validActions.index(((a, b), (c, d)))
                 except:
                     move = 90
             else:
-                move = 90 #invalid
+                move = 90  # invalid
 
             if move <= 88 and valid[move]:
                 break
@@ -1669,6 +1599,7 @@ class HumanPlayer():
 
         return move
 
+
 class RandomPlayer():
     def __init__(self, game):
         self.game = game
@@ -1676,18 +1607,18 @@ class RandomPlayer():
     def play(self, board):
         a = np.random.randint(self.game.getActionSize())
         valids = self.game.getValidMoves(board, 1)
-        while valids[a]!=1:
+        while valids[a] != 1:
             a = np.random.randint(self.game.getActionSize())
         return a
 
-if __name__ == "__main__":
-    args = dotdict({
-        'numIters': 1000,
-        'numEps': 2,
+
+args = dotdict({
+        'numIterations': 1000,
+        'numEpisodes': 2,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSims': 25,
+        'numMCTSSimulations': 25,
         'arenaCompare': 9,
         'cpuct': 1,
         'checkpoint': './temp/',
@@ -1695,7 +1626,6 @@ if __name__ == "__main__":
         # 'filename' : 'no27.neural.data',#2-2-2-2-2
         # 'filename': 'no28.neural.data',  # 3-3-3-3-3
         # 'filename': 'no32.neural.data',  # 1
-
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
         'filename': 38,
@@ -1712,12 +1642,15 @@ if __name__ == "__main__":
         'num_channels': 512,
 
     })
+
+if __name__ == "__main__":
+
     g = Game()
     n = NeuralNet(g, 0, args)
     n.load_checkpoint(folder=args.checkpoint, filename_no=args.filename)
 
-    #play
-    #function
+    # play
+    # function
     # otherPlayer = HumanPlayer(g).play
     # # otherPlayer = RandomPlayer(g).play
     # mcts = MCTS(g,n, args)
@@ -1735,7 +1668,7 @@ if __name__ == "__main__":
     #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
     # print(result)
 
-    #train
+    # train
     c = Coach(g, n, args)
     c.learn()
 
