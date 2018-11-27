@@ -68,5 +68,5 @@ model.add(layers.Dense(1, activation='sigmoid'))
 model.compile(optimizer=optimizers.RMSprop(lr=0.001),
               loss=losses.binary_crossentropy,
               metrics=[metrics.binary_accuracy])
-x_val: None = x_train[:10000]
+x_val = x_train[:10000]
 partial_x_train = x_train[10000:]

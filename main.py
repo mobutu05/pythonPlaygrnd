@@ -491,8 +491,12 @@ from random import shuffle
 
 
 if __name__ == "__main__":
-    g = Game()
+    # g = Game()
     # nn = NeuralNet(g)
     # c = Coach(g, nn)
     # c.learn()
+    a: int = 5
+    b: float = 1.3
+    c: float = a + b
+    print(c)
     pass
