@@ -355,7 +355,7 @@ class Moara(IGame):
         opponent_valid_moves_list = self.getLegalMovesList(-player)
         if player_valid_moves_list == [] and opponent_valid_moves_list == []:
             return 0.001  # draw
-        if self.getOpponentCount(player) < 3 or opponent_valid_moves_list == []:
+        if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
             return 1
         if self.getPlayerCount(player) < 3 or player_valid_moves_list == []:
             return -1
