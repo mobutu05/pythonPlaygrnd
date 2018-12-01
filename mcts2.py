@@ -22,7 +22,7 @@ class IGame:
     def getCrtPlayer(self) -> int:
         pass
 
-    def InitializeBoard(self):
+    def initializeBoard(self):
         """
         Returns:
             startBoard: a representation of the board (ideally this is the form
@@ -287,14 +287,14 @@ class NeuralNet:
 # instance of a IGame
 class Moara(IGame):
     # valid position where pieces reside
-    VALID_POSITIONS = [(0, 0), (0, 3), (0, 6),
-                       (1, 1), (1, 3), (1, 5),
-                       (2, 2), (2, 3), (2, 4),
-                       (3, 0), (3, 1), (3, 2),
-                       (3, 4), (3, 5), (3, 6),
-                       (4, 2), (4, 3), (4, 4),
-                       (5, 1), (5, 3), (5, 5),
-                       (6, 0), (6, 3), (6, 6)]
+    VALID_POSITIONS = [                (0, 0), (0, 3), (0, 6),
+                                       (1, 1), (1, 3), (1, 5),
+                                       (2, 2), (2, 3), (2, 4),
+                       (3, 0), (3, 1), (3, 2),         (3, 4), (3, 5), (3, 6),
+                                       (4, 2), (4, 3), (4, 4),
+                                       (5, 1), (5, 3), (5, 5),
+                                       (6, 0), (6, 3), (6, 6)]
+
     # transition from one position to another
     VALID_MOVES = [
         # move pieces on the table
@@ -373,11 +373,17 @@ class Moara(IGame):
         self.internalArray = []
         # history of positions
         self.history = {}
+        # list of moves
+        self.moves = []
+        #memorize move results (s,a) -> s
+        self.memo = {}
         # number of moves since last capture
         self.noMovesWithoutCapture = 0;
         # number of total moves
         self.noMoves = 0
-        self.InitializeBoard()
+        self.initializeBoard()
+        self.canonized = False  # true if canonical has revert the sign of the player
+        self.n = 7
 
     # return a copy of the game
     def copy(self):
@@ -418,6 +424,7 @@ class Moara(IGame):
         print("   ", end="")
         for y in range(n):
             print(y, "", end="")
+        print(f"X={self.getPlayerCount(1)} Y={self.getPlayerCount(-1)}. Move #{self.noMoves}", end="")
         print("")
         print("  ", end="")
         for _ in range(n):
@@ -426,7 +433,7 @@ class Moara(IGame):
         for y in range(n):
             print(y, "|", end="")  # print the row #
             for x in range(n):
-                piece = self.getPosition((x, y)) * 1 * invariant  # get the piece to print
+                piece = self.getPosition((y, x)) * 1 * invariant  # get the piece to print
                 if piece == 1:
                     print("X ", end="")
                 elif piece == -1:
@@ -462,14 +469,19 @@ class Moara(IGame):
         print("--")
 
     def getCanonicalForm(self):
+
         if self.playerAtMove == 1:
+            self.canonized = False
             return self.copy()
         else:
+
             temp = self.copy()
+            temp.canonized = True
             temp.internalArray = np.array(
                 [self.internalArray[0] * self.playerAtMove, self.internalArray[2], self.internalArray[1],
                  self.internalArray[3] * self.playerAtMove])
             temp.playerAtMove = 1
+            # also revert for history as well
             return temp
 
     def getCrtPlayer(self) -> int:
@@ -520,7 +532,7 @@ class Moara(IGame):
                 len(self.VALID_MOVES) +  # move piece
                 1)  # pass
 
-    def InitializeBoard(self):
+    def initializeBoard(self):
         """
         Returns:
             startBoard: a representation of the board (ideally this is the form
@@ -529,15 +541,6 @@ class Moara(IGame):
         self.playerAtMove = 1
         # first plane - pieces
         arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-        # arr1[0][0] = 1
-        # arr1[3][0] = 1
-        # arr1[6][0] = 1
-        # arr1[4][4] = 1
-        # arr1[6][6] = 1
-        # arr1[2][2] = -1
-        # arr1[1][1] = -1
-        # arr1[3][1] = -1
-        # arr1[5][1] = -1
         # second plane - number of pieces for player 1
         arr2 = np.array([[0. for _ in range(7)] for _ in range(7)])
         arr2[3][3] = 9.0  # unused player 1 pieces
@@ -569,13 +572,16 @@ class Moara(IGame):
         # no more than 3 repetitions allowed
         if s in self.history and self.history[s] > 2:
             return []
-
+        #no more than 50 moves without capture
+        if self.noMovesWithoutCapture > 50:
+            return []
+        result = []
         # normal operations
         if boardStatus == 0:
             if self.getUnusedPlayerCount(player) > 0:  # put
                 # phase 1: can put anywhere where there is an empty place
                 result = list(filter(lambda x: self.getPosition(x) == 0, self.VALID_POSITIONS))
-                return [self.VALID_POSITIONS.index(x) for x in result]
+                result = [self.VALID_POSITIONS.index(x) for x in result]
             elif self.getPlayerCount(player) > 3:  # move
                 # phase 2: need to move a piece in a valid position
                 # select all transitions that have a player piece in the first position and an empty one in the second position
@@ -583,18 +589,16 @@ class Moara(IGame):
                                                self.getPosition(x[1]) == 0, self.VALID_MOVES))
                 # result = [x[0] for x in result]
                 result = [24 + self.VALID_MOVES.index(x) for x in result]
-                return result
             elif self.getPlayerCount(player) == 3:  # jump
                 # phase 3: when only 3 pieces left can move anywhere empty, select any piece
                 result = list(filter(lambda x: self.getPosition(x) == player, self.VALID_POSITIONS))
                 result = [self.VALID_POSITIONS.index(x) for x in result]
-                return result
             else:
-                pass  # should never come here, it's lost
+                assert(False)  # should never come here, it's lost
         else:
             # special case, when a capture must be chosen or a jump when <= 3 pieces remaining
             if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
-                return [24 + len(self.VALID_MOVES)]  # pass
+                result = [24 + len(self.VALID_MOVES)]  # pass
             else:
                 # if the player has a mill, it must remove an opponent's piece,
                 if boardStatus == 100 * player:
@@ -604,20 +608,36 @@ class Moara(IGame):
                     result = list(
                         filter(lambda p: self.isInAMill(p, -player) is False, available_opponent_pieces))
                     result = [self.VALID_POSITIONS.index(x) for x in result]
-                    if len(result) > 0:
-                        return result
-                    else:
-                        # no available enemy piece to capture, that is not in a mill
+                    if len(result) == 0:
+                        self.display()
+                        # if no available enemy piece to capture outside of aa mill
                         # retry with a piece from an enemy mill
                         result = [self.VALID_POSITIONS.index(x) for x in available_opponent_pieces]
-                        return result
-                else:#select where to jump
+                else:  # select where to jump
                     result = list(filter(lambda x: self.getPosition(x) == 0, self.VALID_POSITIONS))
-                    return [self.VALID_POSITIONS.index(x) for x in result]
-        return []
+                    result = [self.VALID_POSITIONS.index(x) for x in result]
+        # simulate each move, so that it wouldn't get into a invalid condition
+        # 3 state repetition or 50 moves without capture
+        # possibleMoves = []
+        # for move in result:
+        #     if self.getBoardStatus() == 0:
+        #         # if (s, move) not in self.memo:
+        #         newState = self.getNextState(move)
+        #         s = newState.toShortString()
+        #         if self.canonized:
+        #             # transform s
+        #             l = list(s)
+        #             l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
+        #             s = ''.join(l)
+        #         if newState.history[s] < 3 and newState.noMovesWithoutCapture < 50:
+        #             possibleMoves.append(move)
+        #     else:
+        #         possibleMoves.append(move)
+
+        return result
 
     def getNextState(self, action):
-        #state will be modified in the copied object
+        # state will be modified in the copied object
         newGameState = self.copy()
         newGameState.playerAtMove = -self.playerAtMove
         boardStatus = self.getBoardStatus()
@@ -633,14 +653,21 @@ class Moara(IGame):
             assert (self.getPosition(newPosition) == -self.playerAtMove)
             newGameState.setPosition(newPosition, 0)
             newGameState.setBoardStatus(0)
+            newGameState.noMovesWithoutCapture = 0  # reset it
             # newGameState.display()
         elif boardStatus == 0:  # select/put piece
-            if action < len(self.VALID_POSITIONS):  # put
-                newPosition = self.VALID_POSITIONS[action]
-                newGameState.setPosition(newPosition, self.playerAtMove)
-                newGameState.decUnusedPlayerCount(self.playerAtMove)
-            else:  # prepare move
-                player_no = self.getPlayerCount(self.playerAtMove)
+            player_no = self.getPlayerCount(self.playerAtMove)
+            if action < len(self.VALID_POSITIONS):  # put or jump type of action
+                if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
+                    newPosition = self.VALID_POSITIONS[action]
+                    newGameState.setPosition(newPosition, self.playerAtMove)
+                    newGameState.decUnusedPlayerCount(self.playerAtMove)
+                else:  # jump
+                    assert (player_no == 3)
+                    old = self.VALID_POSITIONS[action]
+                    assert (self.getPosition(old) == self.playerAtMove)
+                    newGameState.setBoardStatus((action + 1) * self.playerAtMove)
+            else:  # move type of action
                 if player_no > 3:
                     move = self.VALID_MOVES[action - 24]
                     old = move[0]  # from
@@ -649,10 +676,6 @@ class Moara(IGame):
                     newPosition = move[1]  # to
                     assert (self.getPosition(newPosition) == 0)
                     newGameState.setPosition(newPosition, self.playerAtMove)
-                elif player_no == 3:#select where to jump from
-                    old = self.VALID_POSITIONS[action]
-                    assert (self.getPosition(old) == self.playerAtMove)
-                    newGameState.setBoardStatus((action + 1) * self.playerAtMove)
                 else:
                     assert (False)
         elif boardStatus != 0:  # select where to jump to
@@ -671,17 +694,26 @@ class Moara(IGame):
             newGameState.setPosition(old, 0)
             newGameState.setPosition(newPosition, self.playerAtMove)
             newGameState.setBoardStatus(0)
-        if newGameState.isInAMill(newPosition, self.playerAtMove):
-            newGameState.setBoardStatus(100 * self.playerAtMove)  # flag that a capture can be made
-        newGameState.UpdateHistory()
+        if boardStatus == 0:
+            if newGameState.isInAMill(newPosition, self.playerAtMove):
+                newGameState.setBoardStatus(100 * self.playerAtMove)  # flag that a capture can be made
+        newGameState.updateHistory()
         return newGameState
 
-    def UpdateHistory(self):
+    def updateHistory(self):
         s = self.toShortString()
+        if self.canonized:
+            # transform s
+            l = list(s)
+            l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
+            s = ''.join(l)
         if s not in self.history:
             self.history[s] = 1
         else:
             self.history[s] += 1
+        self.moves.append(s)
+        self.noMoves += 1
+        self.noMovesWithoutCapture += 1
 
     def getGameEnded(self, canonical: bool = True) -> float:
         # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
@@ -693,20 +725,35 @@ class Moara(IGame):
         #   - future:
         #       - 50 moves with no capture
         #       - position replay 3 times
-        player = 1 if canonical else self.playerAtMove
+        player = self.playerAtMove
         player_valid_moves_list = self.getValidMoves(player)
         opponent_valid_moves_list = self.getValidMoves(-player)
+        if player_valid_moves_list == [] and opponent_valid_moves_list == []:
+            return 0.00000000001  # draw
         if self.getPlayerCount(player) < 3 or player_valid_moves_list == []:
             return -1
         if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
             return 1
-        if player_valid_moves_list == [] and opponent_valid_moves_list == []:
-            return 0.001  # draw
 
 
         return 0
 
     def getInternalRepresentation(self):
+        '''
+        self.playerAtMove = 1
+        # first plane - pieces
+        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+        # second plane - number of pieces for player 1
+        arr2 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr2[3][3] = 9.0  # unused player 1 pieces
+        # third plane - number of pieces for player 2
+        arr3 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr3[3][3] = 9.0  # unused player 2 pieces
+        # fourth plane - flag is current player must capture
+        arr4 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr4[3][3] = 0.0
+        self.internalArray = np.array([arr1, arr2, arr3, arr4])
+        '''
         return self.internalArray[np.newaxis, :, :]
 
     def getSymmetries(self, pi):
@@ -861,7 +908,7 @@ class MCTS:
 
 def executeEpisode(game, mcts: MCTS):
     trainExamples = []
-    game.InitializeBoard()
+    game.initializeBoard()
     episodeStep = 0
 
     # loop until game ends
