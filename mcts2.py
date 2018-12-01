@@ -15,8 +15,13 @@ import copy
 
 # interface for game classes
 class IGame:
-    pass
-class IGame:
+    # display the board
+    def display(self):
+        pass
+
+    def getCrtPlayer(self) -> int:
+        pass
+
     def InitializeBoard(self):
         """
         Returns:
@@ -37,7 +42,7 @@ class IGame:
         """
         pass
 
-    def GetInternalRepresentation(self):
+    def getInternalRepresentation(self):
         """
         get internal representation of the game state, board to be used by nn
         :return: np array
@@ -64,20 +69,17 @@ class IGame:
         """
         pass
 
-    def getNextState(self, player, action) -> IGame:
+    def getNextState(self, action):
         """
         Input:
-            board: current board
-            player: current player (1 or -1)
             action: action taken by current player
 
         Returns:
-            nextBoard: board after applying action
-            nextPlayer: player who plays in the next turn (should be -player)
+            next: game after applying action
         """
         pass
 
-    def getCanonicalForm(self) -> IGame:
+    def getCanonicalForm(self):
         """
         Input:
             board: current board
@@ -90,6 +92,17 @@ class IGame:
                             of white. When the player is white, we can return
                             board as is. When the player is black, we can invert
                             the colors and return the board.
+        """
+        pass
+
+    def getSymmetries(self, pi):
+        """
+        Input:
+            pi: policy vector of size self.getActionSize()
+        Returns:
+            symmForms: a list of [(board,pi)] where each tuple is a symmetrical
+                       form of the board and the corresponding pi vector. This
+                       is used when training the neural network from examples.
         """
         pass
 
@@ -399,6 +412,55 @@ class Moara(IGame):
                 hh += "_"
         return hh
 
+    def display(self, invariant=1):
+        n = self.internalArray.shape[1]
+        print("")
+        print("   ", end="")
+        for y in range(n):
+            print(y, "", end="")
+        print("")
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+        for y in range(n):
+            print(y, "|", end="")  # print the row #
+            for x in range(n):
+                piece = self.getPosition((x, y)) * 1 * invariant  # get the piece to print
+                if piece == 1:
+                    print("X ", end="")
+                elif piece == -1:
+                    print("O ", end="")
+                else:
+                    if (y, x) in self.VALID_POSITIONS:
+                        # if (str(self), Game.validPositions.index((y, x))) in mcts.Qsa:
+                        if x == n:
+                            print(".", end="")
+                        else:
+                            print(". ", end="")
+                        # else:
+                        #     if x == n:
+                        #         print("!", end="")
+                        #     else:
+                        #         print("! ", end="")
+                    else:
+                        if x == 3 and y == 3 and self.getBoardStatus() != 0:
+                            if np.sign(self.getBoardStatus()) == 1:
+                                print(chr(96 + abs(self.getBoardStatus())), end=" ")
+                            else:
+                                print(chr(96 + abs(self.getBoardStatus())), end="-")
+                        elif x == n:
+                            print(" ", end="")
+                        else:
+                            print("  ", end="")
+
+            print("|")
+
+        print("  ", end="")
+        for _ in range(n):
+            print("-", end="-")
+        print("--")
+
     def getCanonicalForm(self):
         if self.playerAtMove == 1:
             return self.copy()
@@ -407,7 +469,11 @@ class Moara(IGame):
             temp.internalArray = np.array(
                 [self.internalArray[0] * self.playerAtMove, self.internalArray[2], self.internalArray[1],
                  self.internalArray[3] * self.playerAtMove])
+            temp.playerAtMove = 1
             return temp
+
+    def getCrtPlayer(self) -> int:
+        return self.playerAtMove
 
     def getPosition(self, pos):
         (x, y) = pos
@@ -434,11 +500,13 @@ class Moara(IGame):
             return int(self.internalArray[1][3][3])
         else:
             return int(self.internalArray[2][3][3])
+
     def decUnusedPlayerCount(self, player):
         if player == 1:
             self.internalArray[1][3][3] = int(self.internalArray[1][3][3]) - 1
         else:
             self.internalArray[2][3][3] = int(self.internalArray[2][3][3]) - 1
+
     def getActionSize(self):
         """
         Returns:
@@ -458,6 +526,7 @@ class Moara(IGame):
             startBoard: a representation of the board (ideally this is the form
                         that will be the input to your neural network)
         """
+        self.playerAtMove = 1
         # first plane - pieces
         arr1 = np.array([[0 for y in range(7)] for x in range(7)])
         # arr1[0][0] = 1
@@ -503,177 +572,112 @@ class Moara(IGame):
 
         # normal operations
         if boardStatus == 0:
-            # phase 1: can put anywhere where there is an empty place
-            if self.getUnusedPlayerCount(player) > 0:
-
+            if self.getUnusedPlayerCount(player) > 0:  # put
+                # phase 1: can put anywhere where there is an empty place
                 result = list(filter(lambda x: self.getPosition(x) == 0, self.VALID_POSITIONS))
                 return [self.VALID_POSITIONS.index(x) for x in result]
+            elif self.getPlayerCount(player) > 3:  # move
+                # phase 2: need to move a piece in a valid position
+                # select all transitions that have a player piece in the first position and an empty one in the second position
+                result = list(filter(lambda x: self.getPosition(x[0]) == player and
+                                               self.getPosition(x[1]) == 0, self.VALID_MOVES))
+                # result = [x[0] for x in result]
+                result = [24 + self.VALID_MOVES.index(x) for x in result]
+                return result
+            elif self.getPlayerCount(player) == 3:  # jump
+                # phase 3: when only 3 pieces left can move anywhere empty, select any piece
+                result = list(filter(lambda x: self.getPosition(x) == player, self.VALID_POSITIONS))
+                result = [self.VALID_POSITIONS.index(x) for x in result]
+                return result
             else:
-                pass
+                pass  # should never come here, it's lost
         else:
             # special case, when a capture must be chosen or a jump when <= 3 pieces remaining
-            pass
+            if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
+                return [24 + len(self.VALID_MOVES)]  # pass
+            else:
+                # if the player has a mill, it must remove an opponent's piece,
+                if boardStatus == 100 * player:
+                    available_opponent_pieces = list(
+                        filter(lambda x: self.getPosition(x) == -player, self.VALID_POSITIONS))
+                    # that is not an enemy mill
+                    result = list(
+                        filter(lambda p: self.isInAMill(p, -player) is False, available_opponent_pieces))
+                    result = [self.VALID_POSITIONS.index(x) for x in result]
+                    if len(result) > 0:
+                        return result
+                    else:
+                        # no available enemy piece to capture, that is not in a mill
+                        # retry with a piece from an enemy mill
+                        result = [self.VALID_POSITIONS.index(x) for x in available_opponent_pieces]
+                        return result
+                else:#select where to jump
+                    result = list(filter(lambda x: self.getPosition(x) == 0, self.VALID_POSITIONS))
+                    return [self.VALID_POSITIONS.index(x) for x in result]
         return []
 
-        # # opposite player passes
-        # if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
-        #     return [24 + len(self.VALID_MOVES)]  # pass
-        #
-        # # only if the last move results in a mill
-        # # if the player has a mill, it must remove an opponent's piece, that is not a mill either
-        # # mill_no = functools.reduce(lambda acc, mill: acc + isMill(board, mill, player), mills, 0)
-        # # need to select an opponent piece
-        # if boardStatus == 100 * player:
-        #     available_opponent_pieces = list(filter(lambda x: self.getPosition(x) == -player, self.VALID_POSITIONS))
-        #     result = list(filter(lambda p: self.isInAMill(board, p, -player) is False, available_opponent_pieces))
-        #     result = [self.VALID_POSITIONS.index(x) for x in result]
-        #     if len(result) > 0:
-        #         return result  # else choose another move
-        #     else:
-        #         # print("can't capture")
-        #         # board.setBoardStatus(0)
-        #         boardStatus = 0
-        # # move piece, select destination, phase 2 or 3
-        #
-        # # pieces_on_board = functools.reduce(lambda acc, pos: acc + (1 if self.getPosition(board, pos) == player else 0),
-        # #                                    self.validPositions, 0)
-        # pieces_on_board = len([0 for pos in self.VALID_POSITIONS if board.getPosition(pos) == player])
-        # result = []
-        #
-        # player_no = board.getPlayerCount(player)
-        #
-        # if boardStatus != 0:
-        #     # select those actions that originate in the stored position
-        #     boardStatus = boardStatus * player
-        #     if player_no > 3:  # move
-        #         # (x, y) = Game.validPositions[boardStatus - 1]
-        #         # result = list(filter(lambda a: a[0] == (x, y), Game.validActions))
-        #         # result = [x[1] for x in result if board.getPosition(x[1]) == 0]
-        #         # result = set(result)
-        #         # result = [Game.validPositions.index(x) for x in result]
-        #         result = list(filter(lambda x: board.getPosition(x[0]) == player and
-        #                                        board.getPosition(x[1]) == 0,
-        #                              self.validActions))
-        #         result = [24 + self.validPositions.index(x) for x in result]
-        #     if player_no == 3:
-        #         # any empty place
-        #         result = list(filter(lambda x: board.getPosition(x) == 0, Game.validPositions))
-        #         result = [Game.validPositions.index(x) for x in result]
-        #     return result
-        # if player_no > pieces_on_board:  # there are still pieces to put on board
-        #     # phase 1: can put anywhere where there is an empty place
-        #     result = list(filter(lambda x: board.getPosition(x) == 0, Game.validPositions))
-        #     # result = [3 * 24 + self.validPositions.index(x) for x in result]
-        #     result = [Game.validPositions.index(x) for x in result]
-        # elif player_no > 3:
-        #     # phase 2: need to move a piece in a valid position
-        #     # select all transitions that have a player piece in the first position and an empty one in the second position
-        #     result = list(filter(lambda x: board.getPosition(x[0]) == player and
-        #                                    board.getPosition(x[1]) == 0, Game.validActions))
-        #     # result = [x[0] for x in result]
-        #     # result = set(result)
-        #     result = [24 + Game.validActions.index(x) for x in result]
-        # elif player_no == 3:
-        #     # phase 3: when only 3 pieces left can move anywhere empty
-        #     result = list(filter(lambda x: board.getPosition(x) == player, Game.validPositions))
-        #     result = [Game.validPositions.index(x) for x in result]
-        # return result
-
-    def getNextState(self, player, action):
+    def getNextState(self, action):
+        #state will be modified in the copied object
         newGameState = self.copy()
-        newGameState.playerAtMove = -player
-        # if player takes action on board, return next (board,player)
-
+        newGameState.playerAtMove = -self.playerAtMove
+        boardStatus = self.getBoardStatus()
         # if player must make a move or capture, i.e. board status != 0,
         # the opponent takes a dummy move, nothing changes
         if action == 24 + len(self.VALID_MOVES):  # pass
-            newGameState.UpdateHistory()
             return newGameState
 
-        # action must be a valid move
-        # pos = (3, 3)
-        # pieces_on_board = len([0 for pos in Game.validPositions if board.getPosition(pos) == player])
-        # player_no = board.getPlayerCount(player)
-
-        # pre-selection for capture
-        if abs(newGameState.getBoardStatus()) == 100:  # capture
-            # could not capture, but can move
-            if action >= 24:
-                newGameState.setBoardStatus(0)
-            # could not capture, but can jump
-            else:
-                move = self.VALID_POSITIONS[action]
-                if newGameState.getPosition(move) != -player:
-                    newGameState.setBoardStatus(0)
-
-        # phase 1
-        if newGameState.getBoardStatus() == 0:  # select/put piece
+        # capture
+        if abs(boardStatus) == 100:  # capture
+            # newGameState.display()
+            newPosition = self.VALID_POSITIONS[action]
+            assert (self.getPosition(newPosition) == -self.playerAtMove)
+            newGameState.setPosition(newPosition, 0)
+            newGameState.setBoardStatus(0)
+            # newGameState.display()
+        elif boardStatus == 0:  # select/put piece
             if action < len(self.VALID_POSITIONS):  # put
-                pos = self.VALID_POSITIONS[action]
-                newGameState.setPosition(pos, player)
-                newGameState.decUnusedPlayerCount(player)
+                newPosition = self.VALID_POSITIONS[action]
+                newGameState.setPosition(newPosition, self.playerAtMove)
+                newGameState.decUnusedPlayerCount(self.playerAtMove)
             else:  # prepare move
-
+                player_no = self.getPlayerCount(self.playerAtMove)
                 if player_no > 3:
-                    move = Game.validActions[action - 24]
-                    pos = move[0]  # from
-                    if board.getPosition(pos) != player:
-                        board.display(player)
-                    assert (board.getPosition(pos) == player)
-                    board.setPosition(pos, 0)
-                    pos = move[1]  # to
-                    if board.getPosition(pos) != 0:
-                        board.display(player)
-                    assert (board.getPosition(pos) == 0)
-                    board.setPosition(pos, player)
-                elif player_no == 3:
-                    orig = Game.validPositions[action]
-                    assert (board.getPosition(orig) == player)
-                    board.setBoardStatus((action + 1) * player)
+                    move = self.VALID_MOVES[action - 24]
+                    old = move[0]  # from
+                    assert (self.getPosition(old) == self.playerAtMove)
+                    newGameState.setPosition(old, 0)
+                    newPosition = move[1]  # to
+                    assert (self.getPosition(newPosition) == 0)
+                    newGameState.setPosition(newPosition, self.playerAtMove)
+                elif player_no == 3:#select where to jump from
+                    old = self.VALID_POSITIONS[action]
+                    assert (self.getPosition(old) == self.playerAtMove)
+                    newGameState.setBoardStatus((action + 1) * self.playerAtMove)
                 else:
                     assert (False)
-        elif abs(board.getBoardStatus()) == 100:  # capture
-            # make sure flag is used only once
-            # double check
-            # remove piece
-            pos = Game.validPositions[action]
-            if board.getPosition(pos) != -player:
-                aaaa = 0
-            assert (board.getPosition(pos) == -player)
-            board.setPosition(pos, 0)
-            board.setOpponentCount(player, board.getOpponentCount(player) - 1)
-
-            board.setBoardStatus(0)
-            pass
-        elif board.getBoardStatus() != 0:  # move
-            orig = Game.validPositions[abs(board.getBoardStatus()) - 1]
-            pos = Game.validPositions[action]
+        elif boardStatus != 0:  # select where to jump to
+            old = self.VALID_POSITIONS[abs(boardStatus) - 1]
+            newPosition = self.VALID_POSITIONS[action]
             # make sure we start from player
-            if board.getPosition(orig) != player:
-                print(f"not player at {pos}")
-                print(str(board))
-                board.display(player)
-                aaa = 3
-            assert (board.getPosition(orig) == player)
+            if boardStatus != self.playerAtMove:
+                print(f"not player at {old}")
+                self.display()
+            assert (boardStatus == self.playerAtMove)
             # make sure it's empty
-            if board.getPosition(pos) != 0:
-                print(f"not empty for {pos}")
-                print(str(board))
-                board.display(player)
-                aaa = 3
-            assert (board.getPosition(pos) == 0)
-
-            board.setPosition(orig, 0)
-            board.setPosition(pos, player)
-            # make sure flag is used only once
-            board.setBoardStatus(0)
-        if newGameState.isInAMill(pos, player):
-            newGameState.setBoardStatus(100 * player)  # flag that a capture can be made
+            if self.getPosition(newPosition) != 0:
+                print(f"not empty for {newPosition}")
+                self.display()
+            assert (self.getPosition(newPosition) == 0)
+            newGameState.setPosition(old, 0)
+            newGameState.setPosition(newPosition, self.playerAtMove)
+            newGameState.setBoardStatus(0)
+        if newGameState.isInAMill(newPosition, self.playerAtMove):
+            newGameState.setBoardStatus(100 * self.playerAtMove)  # flag that a capture can be made
         newGameState.UpdateHistory()
         return newGameState
 
     def UpdateHistory(self):
-        s = str(self)
+        s = self.toShortString()
         if s not in self.history:
             self.history[s] = 1
         else:
@@ -692,16 +696,29 @@ class Moara(IGame):
         player = 1 if canonical else self.playerAtMove
         player_valid_moves_list = self.getValidMoves(player)
         opponent_valid_moves_list = self.getValidMoves(-player)
-        if player_valid_moves_list == [] and opponent_valid_moves_list == []:
-            return 0.001  # draw
-        if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
-            return 1
         if self.getPlayerCount(player) < 3 or player_valid_moves_list == []:
             return -1
+        if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
+            return 1
+        if player_valid_moves_list == [] and opponent_valid_moves_list == []:
+            return 0.001  # draw
+
+
         return 0
 
-    def GetInternalRepresentation(self):
+    def getInternalRepresentation(self):
         return self.internalArray[np.newaxis, :, :]
+
+    def getSymmetries(self, pi):
+        """
+        Input:
+            pi: policy vector of size self.getActionSize()
+        Returns:
+            symmForms: a list of [(board,pi)] where each tuple is a symmetrical
+                       form of the board and the corresponding pi vector. This
+                       is used when training the neural network from examples.
+        """
+        return [pi]
 
 
 class MCTS:
@@ -739,7 +756,7 @@ class MCTS:
         # it's not a terminal node, continue selecting/creating a sub-node
         s = str(game)
         if s not in self.Prediction:
-            inputToNN = game.GetInternalRepresentation()
+            inputToNN = game.getInternalRepresentation()
             policy, value = self.nnet.predict(inputToNN)
             validMoves = game.getValidMoves(1)
             moves = [1 if x in validMoves else 0 for x in range(game.getActionSize())]
@@ -763,7 +780,7 @@ class MCTS:
             return -value[0]  # because value returned by nn is an array of 1
 
         a = self.getBestAction(s)
-        game = game.getNextState(1, a).getCanonicalForm()
+        game = game.getNextState(a).getCanonicalForm()
         v = self.iterateNode(game)
         if (s, a) in self.Quality:
             q = self.Quality[(s, a)]
@@ -775,7 +792,8 @@ class MCTS:
         else:
             self.Quality[(s, a)] = v
             self.NumberOfActionTaken[(s, a)] = 1
-        self.NumberOfVisits[s] += 1
+        n = self.NumberOfVisits[s] + 1
+        self.NumberOfVisits[s] = n
         return -v
 
     def getBestAction(self, s):
@@ -801,9 +819,9 @@ class MCTS:
                 na = self.NumberOfActionTaken[(s, a)]
                 u = q + moara.args.cpuct * p * math.sqrt(n) / (1 + na)
             else:
-                p = self.Prediction[s][a]
-                n = self.NumberOfVisits[s]
-                u = moara.args.cpuct * p * math.sqrt(n + EPS)  # Q = 0 ?
+                p_ = self.Prediction[s][a]
+                n_ = self.NumberOfVisits[s]
+                u = moara.args.cpuct * p_ * math.sqrt(n_ + EPS)  # Q = 0 ?
 
             if u > cur_best:
                 cur_best = u
@@ -826,19 +844,45 @@ class MCTS:
                 v = self.iterateNode(game)
 
         s = str(game)
-        counts = [self.NumberOfActionTaken[(s, a)] if (s, a) in self.NumberOfActionTaken else 0 for a in range(game.getActionSize())]
+        actionCounters = [self.NumberOfActionTaken[(s, a)] if (s, a) in self.NumberOfActionTaken else 0 for a in
+                          range(game.getActionSize())]
 
-        return counts
+        if temperature == 0:
+            bestA = np.argmax(actionCounters)
+            probabilities = [0] * len(actionCounters)
+            probabilities[bestA] = 1
+        else:
+            counts = [x ** (1. / temperature) for x in actionCounters]
+            # normalization
+            sumcounts = float(sum(counts))
+            probabilities = [x / sumcounts for x in actionCounters]
+        return probabilities
 
 
-def executeEpisode(game: IGame, mcts: MCTS):
-    currentPlayer = 1  # alternate between 1(white) and -1(black)
+def executeEpisode(game, mcts: MCTS):
+    trainExamples = []
+    game.InitializeBoard()
     episodeStep = 0
+
+    # loop until game ends
     while True:
         episodeStep += 1
+        canonical = game.getCanonicalForm()
         temperature: int = int(episodeStep < moara.args.tempThreshold)
-        mcts.getActionProbabilities(game, temperature)
-        pass
+
+        probabilities = mcts.getActionProbabilities(canonical, temperature)
+        sym = canonical.getSymmetries(probabilities)
+
+        action = np.random.choice(len(probabilities), p=probabilities)
+        for p in sym:
+            trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), p, None])
+
+        game = game.getNextState(action)
+        game.display()
+        r = game.getGameEnded()
+
+        if r != 0:
+            return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
 def learn(game: IGame, mcts: MCTS):
