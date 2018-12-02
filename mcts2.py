@@ -15,6 +15,10 @@ import copy
 
 # interface for game classes
 class IGame:
+
+    def reset(self):
+        pass
+
     # display the board
     def display(self):
         pass
@@ -22,15 +26,7 @@ class IGame:
     def getCrtPlayer(self) -> int:
         pass
 
-    def initializeBoard(self):
-        """
-        Returns:
-            startBoard: a representation of the board (ideally this is the form
-                        that will be the input to your neural network)
-        """
-        pass
-
-    def getGameEnded(self, canonical: bool = True) -> float:
+    def getGameEnded(self) -> float:
         """
         Input:
             canonical: whether to use the cannonical form, i.e. player invariant
@@ -107,7 +103,21 @@ class IGame:
         pass
 
 
-class NeuralNet:
+class INeuralNet:
+    def predict(self, input):
+        """
+        Input:
+            board: current board in its canonical form.
+
+        Returns:
+            pi: a policy vector for the current board- a numpy array of length
+                game.getActionSize
+            v: a float in [-1,1] that gives the value of the current board
+        """
+        pass
+
+
+class NeuralNet(INeuralNet):
     """
     This class specifies the base NeuralNet class. To define your own neural
     network, subclass this class and implement the functions below. The neural
@@ -287,13 +297,13 @@ class NeuralNet:
 # instance of a IGame
 class Moara(IGame):
     # valid position where pieces reside
-    VALID_POSITIONS = [                (0, 0), (0, 3), (0, 6),
-                                       (1, 1), (1, 3), (1, 5),
-                                       (2, 2), (2, 3), (2, 4),
-                       (3, 0), (3, 1), (3, 2),         (3, 4), (3, 5), (3, 6),
-                                       (4, 2), (4, 3), (4, 4),
-                                       (5, 1), (5, 3), (5, 5),
-                                       (6, 0), (6, 3), (6, 6)]
+    VALID_POSITIONS = [(0, 0), (0, 3), (0, 6),
+                       (1, 1), (1, 3), (1, 5),
+                       (2, 2), (2, 3), (2, 4),
+                       (3, 0), (3, 1), (3, 2), (3, 4), (3, 5), (3, 6),
+                       (4, 2), (4, 3), (4, 4),
+                       (5, 1), (5, 3), (5, 5),
+                       (6, 0), (6, 3), (6, 6)]
 
     # transition from one position to another
     VALID_MOVES = [
@@ -370,20 +380,39 @@ class Moara(IGame):
 
     def __init__(self, ):
         self.playerAtMove = 1
-        self.internalArray = []
         # history of positions
         self.history = {}
         # list of moves
         self.moves = []
-        #memorize move results (s,a) -> s
+        # memorize move results (s,a) -> s
         self.memo = {}
         # number of moves since last capture
         self.noMovesWithoutCapture = 0;
         # number of total moves
         self.noMoves = 0
-        self.initializeBoard()
         self.canonized = False  # true if canonical has revert the sign of the player
         self.n = 7
+
+        """
+                Returns:
+                    startBoard: a representation of the board (ideally this is the form
+                                that will be the input to your neural network)
+                """
+        # first plane - pieces
+        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
+        # second plane - number of pieces for player 1
+        arr2 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr2[3][3] = 9.0  # unused player 1 pieces
+        # third plane - number of pieces for player 2
+        arr3 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr3[3][3] = 9.0  # unused player 2 pieces
+        # fourth plane - flag is current player must capture
+        arr4 = np.array([[0. for _ in range(7)] for _ in range(7)])
+        arr4[3][3] = 0.0
+        self.internalArray = np.array([arr1, arr2, arr3, arr4])
+
+    def reset(self):
+        self.__init__()
 
     # return a copy of the game
     def copy(self):
@@ -532,25 +561,8 @@ class Moara(IGame):
                 len(self.VALID_MOVES) +  # move piece
                 1)  # pass
 
-    def initializeBoard(self):
-        """
-        Returns:
-            startBoard: a representation of the board (ideally this is the form
-                        that will be the input to your neural network)
-        """
-        self.playerAtMove = 1
-        # first plane - pieces
-        arr1 = np.array([[0 for y in range(7)] for x in range(7)])
-        # second plane - number of pieces for player 1
-        arr2 = np.array([[0. for _ in range(7)] for _ in range(7)])
-        arr2[3][3] = 9.0  # unused player 1 pieces
-        # third plane - number of pieces for player 2
-        arr3 = np.array([[0. for _ in range(7)] for _ in range(7)])
-        arr3[3][3] = 9.0  # unused player 2 pieces
-        # fourth plane - flag is current player must capture
-        arr4 = np.array([[0. for _ in range(7)] for _ in range(7)])
-        arr4[3][3] = 0.0
-        self.internalArray = np.array([arr1, arr2, arr3, arr4])
+
+
 
     def isMill(self, mill, player):
         count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(mill[i]) == player else 0),
@@ -572,7 +584,7 @@ class Moara(IGame):
         # no more than 3 repetitions allowed
         if s in self.history and self.history[s] > 2:
             return []
-        #no more than 50 moves without capture
+        # no more than 50 moves without capture
         if self.noMovesWithoutCapture > 50:
             return []
         result = []
@@ -594,7 +606,7 @@ class Moara(IGame):
                 result = list(filter(lambda x: self.getPosition(x) == player, self.VALID_POSITIONS))
                 result = [self.VALID_POSITIONS.index(x) for x in result]
             else:
-                assert(False)  # should never come here, it's lost
+                assert (False)  # should never come here, it's lost
         else:
             # special case, when a capture must be chosen or a jump when <= 3 pieces remaining
             if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
@@ -715,7 +727,7 @@ class Moara(IGame):
         self.noMoves += 1
         self.noMovesWithoutCapture += 1
 
-    def getGameEnded(self, canonical: bool = True) -> float:
+    def getGameEnded(self) -> float:
         # return 0 if not ended, 1 if player 1 won, -1 if player 1 lost
         # player win if:
         #   - opponent has less than 3 pieces
@@ -734,7 +746,6 @@ class Moara(IGame):
             return -1
         if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
             return 1
-
 
         return 0
 
@@ -906,9 +917,9 @@ class MCTS:
         return probabilities
 
 
-def executeEpisode(game, mcts: MCTS):
+def executeEpisode(game: IGame, mcts: MCTS):
     trainExamples = []
-    game.initializeBoard()
+    game.reset()
     episodeStep = 0
 
     # loop until game ends
@@ -918,11 +929,11 @@ def executeEpisode(game, mcts: MCTS):
         temperature: int = int(episodeStep < moara.args.tempThreshold)
 
         probabilities = mcts.getActionProbabilities(canonical, temperature)
-        sym = canonical.getSymmetries(probabilities)
+        # sym = canonical.getSymmetries(probabilities)
 
         action = np.random.choice(len(probabilities), p=probabilities)
-        for p in sym:
-            trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), p, None])
+        # for p in sym:
+        trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), probabilities])
 
         game = game.getNextState(action)
         game.display()
@@ -940,9 +951,10 @@ def learn(game: IGame, mcts: MCTS):
             executeEpisode(game, mcts)
 
 
-print("mcts 2")
-moaraGame: Moara = Moara()
-n = NeuralNet(moaraGame.getActionSize(), 0, moara.args)
+if __name__ == "__main__":
+    print("mcts 2")
+    moaraGame: Moara = Moara()
+    n = NeuralNet(moaraGame.getActionSize(), 0, moara.args)
 
-mcts = MCTS(n)
-learn(moaraGame, mcts)
+    mcts = MCTS(n)
+    learn(moaraGame, mcts)
