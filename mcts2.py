@@ -1,6 +1,8 @@
 import functools
 import math
 import os
+from collections import deque
+from random import shuffle
 
 import keras
 import numpy as np
@@ -12,9 +14,13 @@ import matplotlib.pyplot as plt
 import moara
 import copy
 
+trainExamplesHistory = []
 
 # interface for game classes
 class IGame:
+
+    def getExtraReward(self):
+        pass
 
     def reset(self):
         pass
@@ -839,7 +845,9 @@ class MCTS:
 
         a = self.getBestAction(s)
         game = game.getNextState(a).getCanonicalForm()
-        v = self.iterateNode(game)
+        #add a reward for capture
+        v = game.getExtraReward()
+        v += self.iterateNode(game)
         if (s, a) in self.Quality:
             q = self.Quality[(s, a)]
             na = self.NumberOfActionTaken[(s, a)]
@@ -943,13 +951,35 @@ def executeEpisode(game: IGame, mcts: MCTS):
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
-def learn(game: IGame, mcts: MCTS):
+def learn(game: IGame, mcts: MCTS, nnet:INeuralNet):
     for i in range(0, moara.args.numIterations + 1):
+        iterationTrainExamples = deque([], maxlen=moara.args.maxlenOfQueue)
         print('------ITER ' + str(i) + '------')
         for episode in range(moara.args.numEpisodes):
             print(f"----- Episode {episode} -----")
-            executeEpisode(game, mcts)
+            example = executeEpisode(game, mcts)
+            if example != []:
+                iterationTrainExamples += example
+        trainExamplesHistory.append(iterationTrainExamples)
+        print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
+        if len(trainExamplesHistory) > moara.args.numItersForTrainExamplesHistory:
+            print("len(trainExamplesHistory) =", len(trainExamplesHistory),
+                  " => remove the oldest trainExamples")
+            trainExamplesHistory.pop(0)
 
+        # shuffle examlpes before training
+        trainExamples = []
+        for e in trainExamplesHistory:
+            trainExamples.extend(e)
+        shuffle(trainExamples)
+        if trainExamples != []:
+            nnet.train(trainExamples)
+
+            # # test against the best no36
+            # if i % 5 == 0:
+            #     # self.PitAgainst('no36.neural.data-ITER-390')
+            #     PitAgainst(moara.filename - 1)
+            nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.filename)
 
 if __name__ == "__main__":
     print("mcts 2")

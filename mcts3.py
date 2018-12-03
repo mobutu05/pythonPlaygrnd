@@ -1,5 +1,7 @@
 import copy
 import functools
+import os
+import pickle
 
 import numpy as np
 from keras import Input, Model
@@ -7,6 +9,7 @@ from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatte
 from keras.optimizers import Adam
 
 import mcts2
+import moara
 
 
 class MoaraNew:
@@ -58,7 +61,7 @@ class NeuralNetNew(mcts2.INeuralNet):
                            loss_weights=[1., 5.], optimizer=Adam(self.args.lr))
         print(self.model.summary())
 
-    def predict(self, input):
+    def predict(self, inputData):
         """
         Input:
             board: current board in its canonical form.
@@ -69,14 +72,63 @@ class NeuralNetNew(mcts2.INeuralNet):
             v: a float in [-1,1] that gives the value of the current board
         """
 
-        pi, v = self.model.predict(input)
+        pi, v = self.model.predict(inputData)
         return pi[0], v[0]
+
+    def save_checkpoint(self, folder, filename_no):
+        """
+        Saves the current neural network (with its parameters) in
+        folder/filename
+        """
+        filename = f"no{filename_no}.neural.data"
+        filepath = os.path.join(folder, filename)
+        if not os.path.exists(folder):
+            print("Checkpoint Directory does not exist! Making directory {}".format(folder))
+            os.mkdir(folder)
+        else:
+            print("Checkpoint Directory exists! ")
+        self.model.save_weights(filepath)
+
+    def load_checkpoint(self, folder, filename_no):
+        """
+        Loads parameters of the neural network from folder/filename
+        """
+        'no37.neural.data'
+        filename = f"no{filename_no}.neural.data"
+        filepath = os.path.join(folder, filename)
+        if os.path.exists(filepath):
+            self.model.load_weights(filepath)
+        else:
+            print("No model in path '{}'".format(filepath))
 
 
 class MoaraNew(mcts2.IGame):
     # transition from one position to another
     VALID_MOVES = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.VALID_MOVES]
     MILLS = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.MILLS]
+    # list of possible moves from each board configuration
+    # this is independent of a particular game, so can be serialized
+    ValidMovesFromState = {}
+
+    def LoadValidMoves(self):
+        folder = moara.args.checkpoint
+        filename = f"valid.moves.data"
+        filepath = os.path.join(folder, filename)
+        if os.path.exists(filepath):
+            infile = open(filepath, 'rb')
+            MoaraNew.ValidMovesFromState = pickle.load(infile)
+            infile.close()
+        else:
+            print("No model in path '{}'".format(filepath))
+            ValidMovesFromState = {}
+
+    def SaveValidMoves(self):
+        folder = moara.args.checkpoint
+        filename = f"valid.moves.data"
+        filepath = os.path.join(folder, filename)
+        outfile = open(filepath, 'wb')
+        pickle.dump(MoaraNew.ValidMovesFromState, outfile)
+        outfile.close()
 
     def __init__(self, ):
         self.board_X = 8
@@ -98,8 +150,8 @@ class MoaraNew(mcts2.IGame):
         self.feature_len = 6  # number of planes describing current board
         self.timePlanes = [[[0 for _ in range(self.boardSize)] for _ in range(self.feature_len)] for _ in
                            range(self.time_len)]
-        self.possibleMoves = (self.boardSize +  # put pieces (while unused pieces exist)
-                              self.boardSize * self.boardSize)  # move/jump pieces
+        self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
+                                  self.boardSize * self.boardSize)  # move/jump pieces
 
     def reset(self):
         self.__init__()
@@ -116,7 +168,7 @@ class MoaraNew(mcts2.IGame):
         Returns:
             actionSize: number of all possible actions
         """
-        return (self.possibleMoves  # put pieces (while unused pieces exist) or move/jump pieces
+        return (self.possibleMovesSize  # put pieces (while unused pieces exist) or move/jump pieces
                 * 10)  # capture none or any of 9 opponent pieces
 
     def copy(self):
@@ -182,124 +234,104 @@ class MoaraNew(mcts2.IGame):
         #       - position replay 3 times
         player = self.playerAtMove
         player_valid_moves_list = self.getValidMoves(player)
-        opponent_valid_moves_list = self.getValidMoves(-player)
-        if player_valid_moves_list == [] and opponent_valid_moves_list == []:
+        s = self.toShortString()
+        # no more than 3 repetitions allowed
+        # no more than 50 moves without capture
+        if s in self.history and self.history[s] > 2 or self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(player) < 3 or player_valid_moves_list == []:
-            return -1
-        if self.getPlayerCount(-player) < 3 or opponent_valid_moves_list == []:
-            return 1
+            return -10
+        if self.getPlayerCount(-player) < 3:
+            return 10
         return 0
 
         # list of legal moves from the current position for the player
 
+    # add reward for capture
+    def getExtraReward(self):
+        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+            return 1.0
+        else:
+            return 0.0
+
     def getValidMoves(self, player):
         s = self.toShortString()
-        # no more than 3 repetitions allowed
-        if s in self.history and self.history[s] > 2:
-            return []
-        # no more than 50 moves without capture
-        if self.noMovesWithoutCapture > 50:
-            return []
+
+        if player == -1:
+            # revert the board.
+            invariantBoard = self.copy()
+            invariantBoard.internalArray = self.internalArray * player
+            # inverse
+            invariantBoard.unusedPieces = [self.unusedPieces[1], self.unusedPieces[0]]
+            invariantBoard.playerAtMove = 1
+            player = 1
+        else:
+            invariantBoard = self
+
+        # memoization
+        board_status = str(invariantBoard)
+        if board_status in MoaraNew.ValidMovesFromState:
+            return MoaraNew.ValidMovesFromState[board_status]
 
         result = []
         moves = []
         capture = []
 
-        if self.getUnusedPlayerCount(player) > 0:  # put
+        if invariantBoard.getUnusedPlayerCount(player) > 0:  # put
             # phase 1: can put anywhere where there is an empty place
-            moves = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+            moves = [x for x in range(invariantBoard.boardSize) if invariantBoard.internalArray[x] == 0]
         else:
-            if self.getPlayerCount(player) > 3:  # move
-                valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player and
-                                                    self.internalArray[x[1]] == 0, self.VALID_MOVES))
+            if invariantBoard.getPlayerCount(player) > 3:  # move
+                valid_moves = list(filter(lambda x: invariantBoard.internalArray[x[0]] == player and
+                                                    invariantBoard.internalArray[x[1]] == 0,
+                                          invariantBoard.VALID_MOVES))
                 for v_m in valid_moves:
-                    #transform into index in action moves
-                    moves.append(self.boardSize + v_m[0]*self.boardSize + v_m[1])
+                    # transform into index in action moves
+                    moves.append(invariantBoard.boardSize + v_m[0] * invariantBoard.boardSize + v_m[1])
             else:  # jump
-                remaining = [x for x in range(self.boardSize) if self.internalArray[x] == player]
-                free = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+                remaining = [x for x in range(invariantBoard.boardSize) if invariantBoard.internalArray[x] == player]
+                free = [x for x in range(invariantBoard.boardSize) if invariantBoard.internalArray[x] == 0]
                 for r in remaining:
                     for f in free:
-                        moves.append(self.boardSize + r * self.boardSize + f)
+                        moves.append(invariantBoard.boardSize + r * invariantBoard.boardSize + f)
 
         # for each possible move, determine if it forms a mill
         # if so then can capture any of the opponent pieces, that are not in a mill
         for move in moves:
-            #extract destination:
-            dest = move % self.boardSize
-            mills = self.getMills(dest)  # any pos is in two mills
-            wouldBeInMill: bool = (self.getMillSum(mills[0]) + self.playerAtMove == 3 * self.playerAtMove) or \
-                                  (self.getMillSum(mills[1]) + self.playerAtMove == 3 * self.playerAtMove)
+            # extract destination:
+            dest = move % invariantBoard.boardSize
+            mills = invariantBoard.getMills(dest)  # any pos is in two mills
+            wouldBeInMill: bool = (invariantBoard.getMillSum(
+                mills[0]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove) or \
+                                  (invariantBoard.getMillSum(
+                                      mills[1]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove)
             if wouldBeInMill:
-                # self.display()
+                debug = 0
+                if debug:
+                    tmp = invariantBoard.copy()
+                    tmp.internalArray[dest] = invariantBoard.playerAtMove
+                    tmp.display()
                 # find all opponents available to capture
                 all_opponent_pieces = \
-                    [x for x in range(self.boardSize) if self.internalArray[x] == -self.playerAtMove]
+                    [x for x in range(invariantBoard.boardSize) if
+                     invariantBoard.internalArray[x] == -invariantBoard.playerAtMove]
                 # that is not an enemy mill
                 available_opponent_pieces = list(
-                    filter(lambda p: self.isInAMill(p, -self.playerAtMove) is False, all_opponent_pieces))
+                    filter(lambda p: invariantBoard.isInAMill(p, -invariantBoard.playerAtMove) is False,
+                           all_opponent_pieces))
                 if len(available_opponent_pieces) == 0:
                     # if no available enemy piece to capture outside of aa mill
                     # retry with a piece from an enemy mill
-                    # self.display()
+                    # invariantBoard.display()
                     available_opponent_pieces = all_opponent_pieces
                 # for each available opponent piece to be captured
-                for x in range(len(available_opponent_pieces)):
-                    result.append(move + (x + 1) * self.possibleMoves)
+                for x in available_opponent_pieces:
+                    index = all_opponent_pieces.index(x)
+                    result.append(move + (index + 1) * invariantBoard.possibleMovesSize)
             else:  # no mill, no capture
                 result.append(move)
-
-        # elif self.getPlayerCount(player) > 3:  # move
-        #     # phase 2: need to move a piece in a valid position
-        #     # select all transitions that have a player piece in the first position and an empty one in the second position
-        #     result = list(filter(lambda x: self.getPosition(x[0]) == player and
-        #                                    self.getPosition(x[1]) == 0, self.VALID_MOVES))
-        #     # result = [x[0] for x in result]
-        #     result = [24 + self.VALID_MOVES.index(x) for x in result]
-        # elif self.getPlayerCount(player) == 3:  # jump
-        #     # phase 3: when only 3 pieces left can move anywhere empty, select any piece
-        #     result = list(filter(lambda x: self.getPosition(x) == player, self.VALID_POSITIONS))
-        #     result = [self.VALID_POSITIONS.index(x) for x in result]
-        # else:
-        #     # special case, when a capture must be chosen or a jump when <= 3 pieces remaining
-        #     if boardStatus != 0 and np.sign(boardStatus) != np.sign(player):
-        #         result = [24 + len(self.VALID_MOVES)]  # pass
-        #     else:
-        #         # if the player has a mill, it must remove an opponent's piece,
-        #         if boardStatus == 100 * player:
-        #             available_opponent_pieces = list(
-        #                 filter(lambda x: self.getPosition(x) == -player, self.VALID_POSITIONS))
-        #             # that is not an enemy mill
-        #             result = list(
-        #                 filter(lambda p: self.isInAMill(p, -player) is False, available_opponent_pieces))
-        #             result = [self.VALID_POSITIONS.index(x) for x in result]
-        #             if len(result) == 0:
-        #                 self.display()
-        #                 # if no available enemy piece to capture outside of aa mill
-        #                 # retry with a piece from an enemy mill
-        #                 result = [self.VALID_POSITIONS.index(x) for x in available_opponent_pieces]
-        #         else:  # select where to jump
-        #             result = list(filter(lambda x: self.getPosition(x) == 0, self.VALID_POSITIONS))
-        #             result = [self.VALID_POSITIONS.index(x) for x in result]
-        # simulate each move, so that it wouldn't get into a invalid condition
-        # 3 state repetition or 50 moves without capture
-        # possibleMoves = []
-        # for move in result:
-        #     if self.getBoardStatus() == 0:
-        #         # if (s, move) not in self.memo:
-        #         newState = self.getNextState(move)
-        #         s = newState.toShortString()
-        #         if self.canonized:
-        #             # transform s
-        #             l = list(s)
-        #             l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
-        #             s = ''.join(l)
-        #         if newState.history[s] < 3 and newState.noMovesWithoutCapture < 50:
-        #             possibleMoves.append(move)
-        #     else:
-        #         possibleMoves.append(move)
-
+        MoaraNew.ValidMovesFromState[board_status] = result
+        self.SaveValidMoves()
         return result
 
     def getNextState(self, action):
@@ -308,13 +340,13 @@ class MoaraNew(mcts2.IGame):
         newGameState.playerAtMove = -self.playerAtMove
         # newGameState.canonized = False
         if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
-            piece_to_put = action % self.possibleMoves
+            piece_to_put = action % self.possibleMovesSize
             newGameState.internalArray[piece_to_put] = self.playerAtMove
             newGameState.decUnusedPlayerCount(self.playerAtMove)
             # also capture
-            if action > self.possibleMoves:
+            if action > self.possibleMovesSize:
                 # newGameState.display()
-                opponent_piece_index = action // self.possibleMoves - 1
+                opponent_piece_index = action // self.possibleMovesSize - 1
                 all_opponent_pieces = \
                     [x for x in range(self.boardSize) if newGameState.internalArray[x] == -self.playerAtMove]
                 opponent_piece = all_opponent_pieces[opponent_piece_index]
@@ -323,7 +355,7 @@ class MoaraNew(mcts2.IGame):
                 newGameState.noMovesWithoutCapture = 0  # reset it
 
         else:
-            piece_to_move = action % self.possibleMoves
+            piece_to_move = action % self.possibleMovesSize
             orig = piece_to_move // self.boardSize - 1
             assert (newGameState.internalArray[orig] == self.playerAtMove)
             dest = piece_to_move % self.boardSize
@@ -331,9 +363,9 @@ class MoaraNew(mcts2.IGame):
             newGameState.internalArray[dest] = self.playerAtMove
             newGameState.internalArray[orig] = 0
             # also capture
-            if action > self.possibleMoves:
+            if action > self.possibleMovesSize:
                 # newGameState.display()
-                opponent_piece_index = action // self.possibleMoves - 1
+                opponent_piece_index = action // self.possibleMovesSize - 1
                 all_opponent_pieces = \
                     [x for x in range(self.boardSize) if newGameState.internalArray[x] == -self.playerAtMove]
                 opponent_piece = all_opponent_pieces[opponent_piece_index]
@@ -341,57 +373,6 @@ class MoaraNew(mcts2.IGame):
                 newGameState.internalArray[opponent_piece] = 0
                 newGameState.noMovesWithoutCapture = 0  # reset it
 
-        # # capture
-        # if abs(boardStatus) == 100:  # capture
-        #     # newGameState.display()
-        #     newPosition = self.VALID_POSITIONS[action]
-        #     assert (self.getPosition(newPosition) == -self.playerAtMove)
-        #     newGameState.setPosition(newPosition, 0)
-        #     newGameState.setBoardStatus(0)
-        #     newGameState.noMovesWithoutCapture = 0  # reset it
-        #     # newGameState.display()
-        # elif boardStatus == 0:  # select/put piece
-        #     player_no = self.getPlayerCount(self.playerAtMove)
-        #     if action < len(self.VALID_POSITIONS):  # put or jump type of action
-        #         if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
-        #             newPosition = self.VALID_POSITIONS[action]
-        #             newGameState.setPosition(newPosition, self.playerAtMove)
-        #             newGameState.decUnusedPlayerCount(self.playerAtMove)
-        #         else:  # jump
-        #             assert (player_no == 3)
-        #             old = self.VALID_POSITIONS[action]
-        #             assert (self.getPosition(old) == self.playerAtMove)
-        #             newGameState.setBoardStatus((action + 1) * self.playerAtMove)
-        #     else:  # move type of action
-        #         if player_no > 3:
-        #             move = self.VALID_MOVES[action - 24]
-        #             old = move[0]  # from
-        #             assert (self.getPosition(old) == self.playerAtMove)
-        #             newGameState.setPosition(old, 0)
-        #             newPosition = move[1]  # to
-        #             assert (self.getPosition(newPosition) == 0)
-        #             newGameState.setPosition(newPosition, self.playerAtMove)
-        #         else:
-        #             assert (False)
-        # elif boardStatus != 0:  # select where to jump to
-        #     old = self.VALID_POSITIONS[abs(boardStatus) - 1]
-        #     newPosition = self.VALID_POSITIONS[action]
-        #     # make sure we start from player
-        #     if boardStatus != self.playerAtMove:
-        #         print(f"not player at {old}")
-        #         self.display()
-        #     assert (boardStatus == self.playerAtMove)
-        #     # make sure it's empty
-        #     if self.getPosition(newPosition) != 0:
-        #         print(f"not empty for {newPosition}")
-        #         self.display()
-        #     assert (self.getPosition(newPosition) == 0)
-        #     newGameState.setPosition(old, 0)
-        #     newGameState.setPosition(newPosition, self.playerAtMove)
-        #     newGameState.setBoardStatus(0)
-        # if boardStatus == 0:
-        #     if newGameState.isInAMill(newPosition, self.playerAtMove):
-        #         newGameState.setBoardStatus(100 * self.playerAtMove)  # flag that a capture can be made
         newGameState.updateHistory()
         # newGameState.display()
         return newGameState
@@ -418,7 +399,9 @@ class MoaraNew(mcts2.IGame):
         print("   ", end="")
         for y in range(n):
             print(y, "", end="")
-        print(f"X={self.getPlayerCount(1)}[{self.getUnusedPlayerCount(1)}] Y={self.getPlayerCount(-1)}[{self.getUnusedPlayerCount(-1)}]. Move #{self.noMoves}", end="")
+        print(
+            f"X={self.getPlayerCount(1)}[{self.getUnusedPlayerCount(1)}] Y={self.getPlayerCount(-1)}[{self.getUnusedPlayerCount(-1)}]. Move #{self.noMoves}",
+            end="")
         print("")
         print("  ", end="")
         for _ in range(n):
@@ -509,7 +492,9 @@ class MoaraNew(mcts2.IGame):
 
 print("mcts 3")
 moaraGame: MoaraNew = MoaraNew()
+moaraGame.LoadValidMoves()
 n = NeuralNetNew(moaraGame, mcts2.moara.args)
+n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-mcts2.learn(moaraGame, mcts)
+mcts2.learn(moaraGame, mcts, n)

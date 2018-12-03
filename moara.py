@@ -1493,7 +1493,7 @@ class Coach():
                 example = self.executeEpisode()
                 if example != []:
                     iterationTrainExamples += example
-            # self.nnet.evaluate(iterationTrainExamples)
+            self.nnet.evaluate(iterationTrainExamples)
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
 
@@ -1628,7 +1628,7 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': 38,
+        'filename': 39,
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
