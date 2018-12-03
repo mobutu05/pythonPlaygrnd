@@ -233,16 +233,18 @@ class MoaraNew(mcts2.IGame):
         #       - 50 moves with no capture
         #       - position replay 3 times
         player = self.playerAtMove
-        player_valid_moves_list = self.getValidMoves(player)
         s = self.toShortString()
         # no more than 3 repetitions allowed
         # no more than 50 moves without capture
         if s in self.history and self.history[s] > 2 or self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
-        if self.getPlayerCount(player) < 3 or player_valid_moves_list == []:
+        if self.getPlayerCount(player) < 3:
             return -10
         if self.getPlayerCount(-player) < 3:
             return 10
+        player_valid_moves_list = self.getValidMoves(player)
+        if player_valid_moves_list == []:
+            return -10
         return 0
 
         # list of legal moves from the current position for the player
@@ -256,7 +258,8 @@ class MoaraNew(mcts2.IGame):
 
     def getValidMoves(self, player):
         s = self.toShortString()
-
+        orig = -1
+        dest = -1
         if player == -1:
             # revert the board.
             invariantBoard = self.copy()
@@ -300,11 +303,29 @@ class MoaraNew(mcts2.IGame):
         for move in moves:
             # extract destination:
             dest = move % invariantBoard.boardSize
+            # there is also an origin to the move:
+            if (move % invariantBoard.possibleMovesSize) > invariantBoard.boardSize:
+                orig = (move % invariantBoard.possibleMovesSize) // invariantBoard.boardSize - 1;
             mills = invariantBoard.getMills(dest)  # any pos is in two mills
-            wouldBeInMill: bool = (invariantBoard.getMillSum(
-                mills[0]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove) or \
-                                  (invariantBoard.getMillSum(
-                                      mills[1]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove)
+            # wouldBeInMill: bool = (invariantBoard.getMillSum(
+            #     mills[0]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove) or \
+            #                       (invariantBoard.getMillSum(
+            #                           mills[1]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove)
+            wouldBeInMill = False
+
+            for mill in mills:
+                copy_of_internal_array = np.array(invariantBoard.internalArray)
+                copy_of_internal_array[dest] = invariantBoard.playerAtMove
+                if orig != -1:
+                    copy_of_internal_array[orig] = 0
+                sum_mill = copy_of_internal_array[mill[0]] + \
+                      copy_of_internal_array[mill[1]] + \
+                      copy_of_internal_array[mill[2]]
+
+                if sum_mill == 3 * invariantBoard.playerAtMove:
+                    wouldBeInMill = True
+                    break
+
             if wouldBeInMill:
                 debug = 0
                 if debug:
