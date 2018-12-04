@@ -1445,8 +1445,8 @@ class Coach():
         nmcts = MCTS(self.game, self.nnet, self.args)
 
         print(f'PITTING AGAINST {neuralDataFileNumber}')
-        arena = Arena(lambda x: np.argmax(nmcts.getActionProb(x, temp=0)),
-                      lambda x: np.argmax(pmcts.getActionProb(x, temp=0)), self.game, self.args)
+        arena = Arena(lambda x: np.argmax(nmcts.getActionProb(x, 0)),
+                      lambda x: np.argmax(pmcts.getActionProb(x, 0)), self.game, self.args)
         nwins, pwins, draws = arena.playGames(self.args.arenaCompare, verbose=True)
         print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
 
@@ -1455,7 +1455,7 @@ class Coach():
 
         otherPlayer = RandomPlayer(g).play
         mcts = MCTS(g, n, args)
-        neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, temp=0))
+        neuralPlayer = lambda x: np.argmax(mcts.getActionProb(x, 0))
         a = Arena(neuralPlayer, otherPlayer, g, args, mcts)
         result = a.playGames(2, verbose=False)
 
@@ -1497,59 +1497,59 @@ class Coach():
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
 
-        print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
-        if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-            print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
-                  " => remove the oldest trainExamples")
-            self.trainExamplesHistory.pop(0)
-        # backup history to a file
-        # NB! the examples were collected using the model from the previous iteration, so (i-1)
-        self.saveTrainExamples(i - 1)
+            print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                      " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
+            # backup history to a file
+            # NB! the examples were collected using the model from the previous iteration, so (i-1)
+            self.saveTrainExamples(i - 1)
 
-        # shuffle examlpes before training
-        trainExamples = []
-        for e in self.trainExamplesHistory:
-            trainExamples.extend(e)
-        shuffle(trainExamples)
-        if trainExamples != []:
-            self.nnet.train(trainExamples)
+            # shuffle examlpes before training
+            trainExamples = []
+            for e in self.trainExamplesHistory:
+                trainExamples.extend(e)
+            shuffle(trainExamples)
+            if trainExamples != []:
+                self.nnet.train(trainExamples)
 
-            # test against the best no36
-            if i % 5 == 0:
-                # self.PitAgainst('no36.neural.data-ITER-390')
-                self.PitAgainst(args.filename - 1)
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
+                # test against the best no36
+                if i % 5 == 0:
+                    # self.PitAgainst('no36.neural.data-ITER-390')
+                    self.PitAgainst(args.filename - 1)
+                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
 
-        # self.test()
-
-
-def saveTrainExamples(self, iteration):
-    # folder = self.args.checkpoint
-    # if not os.path.exists(folder):
-    #     os.makedirs(folder)
-    # filename = os.path.join(folder, self.getCheckpointFile(iteration)+".examples")
-    # with open(filename, "wb+") as f:
-    #     Pickler(f).dump(self.trainExamplesHistory)
-    # f.closed
-    pass
+            # self.test()
 
 
-def loadTrainExamples(self):
-    # modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
-    # examplesFile = modelFile+".examples"
-    # if not os.path.isfile(examplesFile):
-    #     print(examplesFile)
-    #     r = input("File with trainExamples not found. Continue? [y|n]")
-    #     if r != "y":
-    #         sys.exit()
-    # else:
-    #     print("File with trainExamples found. Read it.")
-    #     with open(examplesFile, "rb") as f:
-    #         self.trainExamplesHistory = Unpickler(f).load()
-    #     f.closed
-    #     # examples based on the model were already collected (loaded)
-    #     self.skipFirstSelfPlay = True
-    pass
+    def saveTrainExamples(self, iteration):
+        # folder = self.args.checkpoint
+        # if not os.path.exists(folder):
+        #     os.makedirs(folder)
+        # filename = os.path.join(folder, self.getCheckpointFile(iteration)+".examples")
+        # with open(filename, "wb+") as f:
+        #     Pickler(f).dump(self.trainExamplesHistory)
+        # f.closed
+        pass
+
+
+    def loadTrainExamples(self):
+        # modelFile = os.path.join(self.args.load_folder_file[0], self.args.load_folder_file[1])
+        # examplesFile = modelFile+".examples"
+        # if not os.path.isfile(examplesFile):
+        #     print(examplesFile)
+        #     r = input("File with trainExamples not found. Continue? [y|n]")
+        #     if r != "y":
+        #         sys.exit()
+        # else:
+        #     print("File with trainExamples found. Read it.")
+        #     with open(examplesFile, "rb") as f:
+        #         self.trainExamplesHistory = Unpickler(f).load()
+        #     f.closed
+        #     # examples based on the model were already collected (loaded)
+        #     self.skipFirstSelfPlay = True
+        pass
 
 
 class dotdict(dict):
@@ -1614,7 +1614,7 @@ class RandomPlayer():
 
 args = dotdict({
         'numIterations': 1000,
-        'numEpisodes': 2,
+        'numEpisodes': 1,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,

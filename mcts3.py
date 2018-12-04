@@ -10,7 +10,7 @@ from keras.optimizers import Adam
 
 import mcts2
 import moara
-
+import matplotlib.pyplot as plt
 
 class MoaraNew:
     pass
@@ -71,9 +71,47 @@ class NeuralNetNew(mcts2.INeuralNet):
                 game.getActionSize
             v: a float in [-1,1] that gives the value of the current board
         """
-
+        inputData = inputData[np.newaxis, :, :]
         pi, v = self.model.predict(inputData)
         return pi[0], v[0]
+
+    def train(self, examples):
+        """
+        This function trains the neural network with examples obtained from
+        self-play.
+
+        Input:
+            examples: a list of training examples, where each example is of form
+                      (board, pi, v). pi is the MCTS informed policy vector for
+                      the given board, and v is its value. The examples has
+                      board in its canonical form.
+        """
+
+        input_boards, target_pis, target_vs = list(zip(*examples))
+        print("mumu")
+        print(len(examples))
+        input_boards = np.asarray(input_boards)
+        target_pis = np.asarray(target_pis)
+        target_vs = np.asarray(target_vs)
+        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
+                                epochs=self.args.epochs, validation_split=0.1)
+        # for key in result.history.keys():
+        #     print(key)
+        #     print(result.history[key])
+
+        plt.clf()
+        epochs = range(1, len(result.history['loss']) + 1)
+        plt.plot(epochs, result.history['loss'], 'bo', label='Training acc')
+        plt.plot(epochs, result.history['val_loss'], 'b', label='Validation acc')
+        plt.title('Training and validation accuracy')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+        # plt.show()
+        plt.ion()
+        plt.show()
+        # plt.draw()
+        plt.pause(0.001)
 
     def save_checkpoint(self, folder, filename_no):
         """
@@ -239,20 +277,21 @@ class MoaraNew(mcts2.IGame):
         if s in self.history and self.history[s] > 2 or self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(player) < 3:
-            return -10
+            return -1
         if self.getPlayerCount(-player) < 3:
-            return 10
+            return 1
         player_valid_moves_list = self.getValidMoves(player)
         if player_valid_moves_list == []:
-            return -10
+            return -1
         return 0
 
         # list of legal moves from the current position for the player
 
     # add reward for capture
     def getExtraReward(self):
+        # return 0
         if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 1.0
+            return 0.1
         else:
             return 0.0
 
@@ -508,7 +547,7 @@ class MoaraNew(mcts2.IGame):
         # total moves without capture
         result.append([self.noMovesWithoutCapture for _ in range(self.boardSize)])
         res2 = np.array(result).reshape(51, self.board_X, self.board_Y)
-        return res2[np.newaxis, :, :]
+        return res2
 
 
 print("mcts 3")

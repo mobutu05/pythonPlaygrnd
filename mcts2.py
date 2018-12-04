@@ -16,6 +16,7 @@ import copy
 
 trainExamplesHistory = []
 
+
 # interface for game classes
 class IGame:
 
@@ -121,6 +122,28 @@ class INeuralNet:
             v: a float in [-1,1] that gives the value of the current board
         """
         pass
+
+    def train(self, examples):
+        """
+        This function trains the neural network with examples obtained from
+        self-play.
+
+        Input:
+            examples: a list of training examples, where each example is of form
+                      (board, pi, v). pi is the MCTS informed policy vector for
+                      the given board, and v is its value. The examples has
+                      board in its canonical form.
+        """
+
+    def load_checkpoint(self, folder, filename_no):
+        """
+        Loads parameters of the neural network from folder/filename
+        """
+    def save_checkpoint(self, folder, filename_no):
+        """
+        Saves the current neural network (with its parameters) in
+        folder/filename
+        """
 
 
 class NeuralNet(INeuralNet):
@@ -567,9 +590,6 @@ class Moara(IGame):
                 len(self.VALID_MOVES) +  # move piece
                 1)  # pass
 
-
-
-
     def isMill(self, mill, player):
         count = functools.reduce(lambda acc, i: acc + (1 if self.getPosition(mill[i]) == player else 0),
                                  range(3), 0)
@@ -794,6 +814,11 @@ class MCTS:
         self.nnet = nnet
         self.ValidMoves = {}  # stores game.getValidMoves for board s
 
+        #how many times an existing node was traversed
+        self.ExistingNodesCounter = 0
+        # how many times a new node was created
+        self.NewNodesCounter = 0
+
     def iterateNode(self, game: IGame):
         """
         This function performs one iteration of MCTS. It is recursively called
@@ -821,10 +846,10 @@ class MCTS:
         s = str(game)
         if s not in self.Prediction:
             inputToNN = game.getInternalRepresentation()
-            policy, value = self.nnet.predict(inputToNN)
+            policy_predicted, value = self.nnet.predict(inputToNN)
             validMoves = game.getValidMoves(1)
             moves = [1 if x in validMoves else 0 for x in range(game.getActionSize())]
-            policy = policy * moves  # masking invalid moves
+            policy = policy_predicted * moves  # masking invalid moves
             sum_Policies = np.sum(policy)
             if sum_Policies > 0:
                 policy /= sum_Policies  # renormalize
@@ -839,13 +864,14 @@ class MCTS:
             self.Prediction[s] = policy
             self.ValidMoves[s] = validMoves
             self.NumberOfVisits[s] = 0
-
+            self.NewNodesCounter += 1
             # print(".", end=" ")
             return -value[0]  # because value returned by nn is an array of 1
 
+        self.ExistingNodesCounter += 1
         a = self.getBestAction(s)
         game = game.getNextState(a).getCanonicalForm()
-        #add a reward for capture
+        # add a reward for capture
         v = game.getExtraReward()
         v += self.iterateNode(game)
         if (s, a) in self.Quality:
@@ -944,14 +970,21 @@ def executeEpisode(game: IGame, mcts: MCTS):
         trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), probabilities])
 
         game = game.getNextState(action)
-        game.display()
+        # game.display()
+        s = str(canonical)
+        if (s, action) in mcts.Quality:
+            # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
+            print(
+                f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
+        mcts.ExistingNodesCounter = 0
+        mcts.NewNodesCounter = 0
         r = game.getGameEnded()
 
         if r != 0:
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
-def learn(game: IGame, mcts: MCTS, nnet:INeuralNet):
+def learn(game: IGame, mcts: MCTS, nnet: INeuralNet):
     for i in range(0, moara.args.numIterations + 1):
         iterationTrainExamples = deque([], maxlen=moara.args.maxlenOfQueue)
         print('------ITER ' + str(i) + '------')
@@ -961,7 +994,7 @@ def learn(game: IGame, mcts: MCTS, nnet:INeuralNet):
             if example != []:
                 iterationTrainExamples += example
         trainExamplesHistory.append(iterationTrainExamples)
-        print(f"len(trainExamplesHistory) ={len(self.trainExamplesHistory)}")
+        print(f"len(trainExamplesHistory) ={len(trainExamplesHistory)}")
         if len(trainExamplesHistory) > moara.args.numItersForTrainExamplesHistory:
             print("len(trainExamplesHistory) =", len(trainExamplesHistory),
                   " => remove the oldest trainExamples")
@@ -979,7 +1012,8 @@ def learn(game: IGame, mcts: MCTS, nnet:INeuralNet):
             # if i % 5 == 0:
             #     # self.PitAgainst('no36.neural.data-ITER-390')
             #     PitAgainst(moara.filename - 1)
-            nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.filename)
+            nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+
 
 if __name__ == "__main__":
     print("mcts 2")
