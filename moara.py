@@ -1614,11 +1614,11 @@ class RandomPlayer():
 
 args = dotdict({
         'numIterations': 1000,
-        'numEpisodes': 1,
+        'numEpisodes': 5,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSimulations': 20,
+        'numMCTSSimulations': 25,
         'arenaCompare': 9,
         'cpuct': 1,
         'checkpoint': './temp/',
@@ -1628,11 +1628,11 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': 39,
+        'filename': 181204,
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
-        'numItersForTrainExamplesHistory': 20,
+        'numItersForTrainExamplesHistory':50,
 
         'lr': 0.001,
         'dropout': 0.3,

@@ -99,19 +99,19 @@ class NeuralNetNew(mcts2.INeuralNet):
         #     print(key)
         #     print(result.history[key])
 
-        plt.clf()
-        epochs = range(1, len(result.history['loss']) + 1)
-        plt.plot(epochs, result.history['loss'], 'bo', label='Training acc')
-        plt.plot(epochs, result.history['val_loss'], 'b', label='Validation acc')
-        plt.title('Training and validation accuracy')
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.legend()
+        # plt.clf()
+        # epochs = range(1, len(result.history['loss']) + 1)
+        # plt.plot(epochs, result.history['loss'], 'bo', label='Training acc')
+        # plt.plot(epochs, result.history['val_loss'], 'b', label='Validation acc')
+        # plt.title('Training and validation accuracy')
+        # plt.xlabel('Epochs')
+        # plt.ylabel('Loss')
+        # plt.legend()
+        # # plt.show()
+        # plt.ion()
         # plt.show()
-        plt.ion()
-        plt.show()
-        # plt.draw()
-        plt.pause(0.001)
+        # # plt.draw()
+        # plt.pause(0.001)
 
     def save_checkpoint(self, folder, filename_no):
         """
@@ -202,7 +202,7 @@ class MoaraNew(mcts2.IGame):
 
     # string representation of the current position in the game
     def __repr__(self):
-        return f"{self.toShortString()}_{self.getUnusedPlayerCount(1)}_{self.getUnusedPlayerCount(-1)}"
+        return f"{self.toShortString()}  {self.getUnusedPlayerCount(1)}-{self.getUnusedPlayerCount(-1)} {self.getPlayerCount(1)}-{self.getPlayerCount(-1)}"
 
     def getActionSize(self):
         """
@@ -282,23 +282,23 @@ class MoaraNew(mcts2.IGame):
         if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(player) < 3:
-            return -1
+            return -9
         if self.getPlayerCount(-player) < 3:
-            return 1
+            return 9
         player_valid_moves_list = self.getValidMoves(player)
         if player_valid_moves_list == []:
-            return -1
+            return -9
         return 0
 
         # list of legal moves from the current position for the player
 
     # add reward for capture
     def getExtraReward(self):
-        # return 0
-        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 0.5
-        else:
-            return 0.0
+        return 0
+        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+        #     return 1
+        # else:
+        #     return 0.0
 
     def getValidMoves(self, player):
         s = self.toShortString()

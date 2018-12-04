@@ -824,6 +824,18 @@ class MCTS:
         # how many times a new node was created
         self.NewNodesCounter = 0
 
+    def reset(self):
+        self.Quality = {}  # quality of taken action a from state s
+        self.NumberOfActionTaken = {}  # stores #times action a was taken from board s
+        self.NumberOfVisits = {}  # stores #times board s was encountered in the mcts search
+        self.Prediction = {}  # prediction of taken action a from state s (returned by neural net)
+        self.ValidMoves = {}  # stores game.getValidMoves for board s
+
+        # how many times an existing node was traversed
+        self.ExistingNodesCounter = 0
+        # how many times a new node was created
+        self.NewNodesCounter = 0
+
     def iterateNode(self, game: IGame):
         """
         This function performs one iteration of MCTS. It is recursively called
@@ -871,14 +883,14 @@ class MCTS:
             self.NumberOfVisits[s] = 0
             self.NewNodesCounter += 1
             # print(".", end=" ")
-            return -value[0]  # because value returned by nn is an array of 1
+            return -value[0] #+ game.getExtraReward()
 
         self.ExistingNodesCounter += 1
         a = self.getBestAction(s)
-        game = game.getNextState(a).getCanonicalForm()
+        newgame = game.getNextState(a).getCanonicalForm()
         # add a reward for capture
-        v = game.getExtraReward()
-        v += self.iterateNode(game)
+        v = newgame.getExtraReward()
+        v += self.iterateNode(newgame)
         if (s, a) in self.Quality:
             q = self.Quality[(s, a)]
             na = self.NumberOfActionTaken[(s, a)]
@@ -965,7 +977,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
     while True:
         episodeStep += 1
         canonical = game.getCanonicalForm()
-        temperature: int = int(episodeStep < moara.args.tempThreshold)
+        temperature: int = 1 #int(episodeStep < moara.args.tempThreshold)
 
         probabilities = mcts.getActionProbabilities(canonical, temperature)
         # sym = canonical.getSymmetries(probabilities)
@@ -990,12 +1002,13 @@ def executeEpisode(game: IGame, mcts: MCTS):
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
-def learn(game: IGame, mcts: MCTS, nnet: INeuralNet):
+def learn(game: IGame, mcts:MCTS, nnet: INeuralNet):
     for i in range(0, moara.args.numIterations + 1):
         iterationTrainExamples = deque([], maxlen=moara.args.maxlenOfQueue)
         print('------ITER ' + str(i) + '------')
         for episode in range(moara.args.numEpisodes):
             print(f"----- Episode {episode} -----")
+            mcts.reset()
             example = executeEpisode(game, mcts)
             if example != []:
                 iterationTrainExamples += example
@@ -1014,17 +1027,29 @@ def learn(game: IGame, mcts: MCTS, nnet: INeuralNet):
         if trainExamples != []:
             nnet.train(trainExamples)
 
-            # # test against the best no36
+            # test against the previous
             # if i % 5 == 0:
             #     # self.PitAgainst('no36.neural.data-ITER-390')
             #     PitAgainst(moara.filename - 1)
             nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
+# def PitAgainst(neuralDataFileNumber):
+#
+#     # self.pnet = self.nnet.__class__(self.game, args)  # the competitor network
+#     if self.pnet is None:
+#         self.pnet = NeuralNet(g, 37, moara.args)
+#     self.pnet.load_checkpoint(folder=self.args.checkpoint, filename_no=neuralDataFileNumber)
+#     pmcts = MCTS(self.game, self.pnet, self.args)
+#     nmcts = MCTS(self.game, self.nnet, self.args)
+#
+#     print(f'PITTING AGAINST {neuralDataFileNumber}')
+#     arena = moara.Arena(lambda x: np.argmax(nmcts.getActionProb(x, 0)),
+#                   lambda x: np.argmax(pmcts.getActionProb(x, 0)), self.game, self.args)
+#     nwins, pwins, draws = arena.playGames(self.args.arenaCompare, verbose=True)
+#     print('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
 
 if __name__ == "__main__":
     print("mcts 2")
     moaraGame: Moara = Moara()
     n = NeuralNet(moaraGame.getActionSize(), 0, moara.args)
-
-    mcts = MCTS(n)
-    learn(moaraGame, mcts)
+    learn(moaraGame)
