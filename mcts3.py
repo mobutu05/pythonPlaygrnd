@@ -191,6 +191,9 @@ class MoaraNew(mcts2.IGame):
         self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
                                   self.boardSize * self.boardSize)  # move/jump pieces
 
+    def SaveData(self):
+        self.SaveValidMoves()
+
     def reset(self):
         self.__init__()
 
@@ -272,9 +275,11 @@ class MoaraNew(mcts2.IGame):
         #       - position replay 3 times
         player = self.playerAtMove
         s = self.toShortString()
-        # no more than 3 repetitions allowed
+        # no more than 3 repetitions allowed:win if the opponent choose a state already existing
+        if s in self.history and self.history[s] > 3:
+            return 0.00000000001
         # no more than 50 moves without capture
-        if s in self.history and self.history[s] > 2 or self.noMovesWithoutCapture > 50:
+        if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(player) < 3:
             return -1
@@ -291,7 +296,7 @@ class MoaraNew(mcts2.IGame):
     def getExtraReward(self):
         # return 0
         if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 0.1
+            return 0.5
         else:
             return 0.0
 
@@ -391,7 +396,7 @@ class MoaraNew(mcts2.IGame):
             else:  # no mill, no capture
                 result.append(move)
         MoaraNew.ValidMovesFromState[board_status] = result
-        self.SaveValidMoves()
+        # self.SaveValidMoves()
         return result
 
     def getNextState(self, action):

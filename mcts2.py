@@ -20,6 +20,11 @@ trainExamplesHistory = []
 # interface for game classes
 class IGame:
 
+    #if there is some state to be save to a persistent medium
+    def SaveData(self):
+        pass
+
+    #any extra reward beside the one predicted by end game
     def getExtraReward(self):
         pass
 
@@ -969,7 +974,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
         # for p in sym:
         trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), probabilities])
 
-        game = game.getNextState(action)
+        game:IGame = game.getNextState(action)
         # game.display()
         s = str(canonical)
         if (s, action) in mcts.Quality:
@@ -981,6 +986,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
         r = game.getGameEnded()
 
         if r != 0:
+            game.SaveData()
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
