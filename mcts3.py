@@ -317,11 +317,11 @@ class MoaraNew(mcts2.IGame):
 
         # memoization
         board_status = invariantBoard.toShortString()
-        if invariantBoard.canonized:
-            # transform s
-            l = list(board_status)
-            l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
-            board_status = ''.join(l)
+        # if invariantBoard.canonized:
+        #     # transform s
+        #     l = list(board_status)
+        #     l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
+        #     board_status = ''.join(l)
         if board_status in MoaraNew.ValidMovesFromState:
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
             #     return MoaraNew.ValidMovesFromState[board_status]
@@ -457,7 +457,7 @@ class MoaraNew(mcts2.IGame):
             piece_to_move = action % self.possibleMovesSize
             orig = piece_to_move // self.boardSize - 1
             if newGameState.internalArray[orig] != self.playerAtMove:
-                assert (newGameState.internalArray[orig] == self.playerAtMove)
+                    assert (newGameState.internalArray[orig] == self.playerAtMove)
             dest = piece_to_move % self.boardSize
             if newGameState.internalArray[dest] != 0:
                 assert (newGameState.internalArray[dest] == 0)
