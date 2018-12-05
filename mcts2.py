@@ -817,7 +817,6 @@ class MCTS:
         self.NumberOfVisits = {}  # stores #times board s was encountered in the mcts search
         self.Prediction = {}  # prediction of taken action a from state s (returned by neural net)
         self.nnet = nnet
-        self.ValidMoves = {}  # stores game.getValidMoves for board s
 
         #how many times an existing node was traversed
         self.ExistingNodesCounter = 0
@@ -829,7 +828,6 @@ class MCTS:
         self.NumberOfActionTaken = {}  # stores #times action a was taken from board s
         self.NumberOfVisits = {}  # stores #times board s was encountered in the mcts search
         self.Prediction = {}  # prediction of taken action a from state s (returned by neural net)
-        self.ValidMoves = {}  # stores game.getValidMoves for board s
 
         # how many times an existing node was traversed
         self.ExistingNodesCounter = 0
@@ -879,14 +877,13 @@ class MCTS:
                 policy = policy + moves
                 policy /= np.sum(policy)
             self.Prediction[s] = policy
-            self.ValidMoves[s] = validMoves
             self.NumberOfVisits[s] = 0
             self.NewNodesCounter += 1
             # print(".", end=" ")
             return -value[0] #+ game.getExtraReward()
 
         self.ExistingNodesCounter += 1
-        a = self.getBestAction(s)
+        a = self.getBestAction(game)
         newgame = game.getNextState(a).getCanonicalForm()
         # add a reward for capture
         v = newgame.getExtraReward()
@@ -905,7 +902,7 @@ class MCTS:
         self.NumberOfVisits[s] = n
         return -v
 
-    def getBestAction(self, s):
+    def getBestAction(self, game: IGame):
         EPS = 1e-8
         cur_best = -float('inf')
         best_act = -1
@@ -919,8 +916,8 @@ class MCTS:
         # a = best_pair[0]
 
         # UCT calculation
-
-        for a in self.ValidMoves[s]:
+        s = str(game)
+        for a in game.getValidMoves(1):
             if (s, a) in self.Quality:
                 q = self.Quality[(s, a)]
                 p = self.Prediction[s][a]

@@ -317,8 +317,29 @@ class MoaraNew(mcts2.IGame):
 
         # memoization
         board_status = str(invariantBoard)
+
         if board_status in MoaraNew.ValidMovesFromState:
-            return MoaraNew.ValidMovesFromState[board_status]
+            if s not in self.history or self.history[s] < 2:
+                return MoaraNew.ValidMovesFromState[board_status]
+            else:
+                # need to simulate
+                # if the position has already been repeated than make sure that no subsequent move
+                # simulate each move, so that it wouldn't get into a invalid condition
+                # 3 state repetition or 50 moves without capture
+                possibleMoves = []
+                for move in MoaraNew.ValidMovesFromState[board_status]:
+                    # if (s, move) not in self.memo:
+                    newState = self.getNextState(move)
+                    s = newState.toShortString()
+                    if self.canonized:
+                        # transform s
+                        l = list(s)
+                        l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
+                        s = ''.join(l)
+                    if newState.history[s] < 3 and newState.noMovesWithoutCapture < 50:
+                        possibleMoves.append(move)
+
+                return possibleMoves
 
         result = []
         moves = []
@@ -395,6 +416,9 @@ class MoaraNew(mcts2.IGame):
                     result.append(move + (index + 1) * invariantBoard.possibleMovesSize)
             else:  # no mill, no capture
                 result.append(move)
+
+
+
         MoaraNew.ValidMovesFromState[board_status] = result
         # self.SaveValidMoves()
         return result
