@@ -202,7 +202,7 @@ class MoaraNew(mcts2.IGame):
 
     # string representation of the current position in the game
     def __repr__(self):
-        return f"{self.toShortString()}  {self.getUnusedPlayerCount(1)}-{self.getUnusedPlayerCount(-1)} {self.getPlayerCount(1)}-{self.getPlayerCount(-1)}"
+        return f"{self.toShortString()}  {self.getUnusedPlayerCount(1)}-{self.getUnusedPlayerCount(-1)}"
 
     def getActionSize(self):
         """
@@ -294,17 +294,17 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        return 0
-        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-        #     return 1
-        # else:
-        #     return 0.0
+        # return 0
+        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+            return 1
+        else:
+            return 0.0
 
     def getValidMoves(self, player):
         s = self.toShortString()
         orig = -1
         dest = -1
-        if player == -1:
+        if self.playerAtMove == -1:
             # revert the board.
             invariantBoard = self.copy()
             invariantBoard.internalArray = self.internalArray * player
@@ -316,30 +316,40 @@ class MoaraNew(mcts2.IGame):
             invariantBoard = self
 
         # memoization
-        board_status = str(invariantBoard)
-
+        board_status = invariantBoard.toShortString()
+        if invariantBoard.canonized:
+            # transform s
+            l = list(board_status)
+            l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
+            board_status = ''.join(l)
         if board_status in MoaraNew.ValidMovesFromState:
-            if s not in self.history or self.history[s] < 2:
-                return MoaraNew.ValidMovesFromState[board_status]
-            else:
-                # need to simulate
-                # if the position has already been repeated than make sure that no subsequent move
-                # simulate each move, so that it wouldn't get into a invalid condition
-                # 3 state repetition or 50 moves without capture
-                possibleMoves = []
-                for move in MoaraNew.ValidMovesFromState[board_status]:
-                    # if (s, move) not in self.memo:
-                    newState = self.getNextState(move)
+            # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
+            #     return MoaraNew.ValidMovesFromState[board_status]
+            # else:
+
+
+            # need to simulate
+            # if the position has already been repeated than make sure that no subsequent move
+            # simulate each move, so that it wouldn't get into a invalid condition
+            # 3 state repetition or 50 moves without capture
+            possibleMoves = []
+            for move in MoaraNew.ValidMovesFromState[board_status]:
+                # if (s, move) not in self.memo:
+                if (board_status, move) not in MoaraNew.ValidMovesFromState:
+                    newState = invariantBoard.getNextState(move)
                     s = newState.toShortString()
-                    if self.canonized:
+                    if invariantBoard.canonized:
                         # transform s
                         l = list(s)
-                        l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
+                        l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
                         s = ''.join(l)
-                    if newState.history[s] < 3 and newState.noMovesWithoutCapture < 50:
-                        possibleMoves.append(move)
+                    MoaraNew.ValidMovesFromState[(board_status, move)] = s
+                else:
+                    s = MoaraNew.ValidMovesFromState[(board_status, move)]
+                if (s not in invariantBoard.history or invariantBoard.history[s] < 3) and invariantBoard.noMovesWithoutCapture < 50:
+                    possibleMoves.append(move)
 
-                return possibleMoves
+            return possibleMoves
 
         result = []
         moves = []
@@ -446,9 +456,11 @@ class MoaraNew(mcts2.IGame):
         else:
             piece_to_move = action % self.possibleMovesSize
             orig = piece_to_move // self.boardSize - 1
-            assert (newGameState.internalArray[orig] == self.playerAtMove)
+            if newGameState.internalArray[orig] != self.playerAtMove:
+                assert (newGameState.internalArray[orig] == self.playerAtMove)
             dest = piece_to_move % self.boardSize
-            assert (newGameState.internalArray[dest] == 0)
+            if newGameState.internalArray[dest] != 0:
+                assert (newGameState.internalArray[dest] == 0)
             newGameState.internalArray[dest] = self.playerAtMove
             newGameState.internalArray[orig] = 0
             # also capture
@@ -471,7 +483,7 @@ class MoaraNew(mcts2.IGame):
         if self.canonized:
             # transform s
             l = list(s)
-            l = ['x' if x == 'o' else 'o' if x == 'x' else '_' for x in l]
+            l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
             s = ''.join(l)
             # s = self.toShortString()
         if s not in self.history:

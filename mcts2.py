@@ -38,6 +38,9 @@ class IGame:
     def getCrtPlayer(self) -> int:
         pass
 
+    def getPlayerCount(self, player)->int:
+        pass
+
     def getGameEnded(self) -> float:
         """
         Input:
@@ -875,7 +878,8 @@ class MCTS:
                 # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.
                 print("All valid moves were masked, do workaround.")
                 policy = policy + moves
-                policy /= np.sum(policy)
+                if np.sum(policy) != 0:
+                    policy /= np.sum(policy)
             self.Prediction[s] = policy
             self.NumberOfVisits[s] = 0
             self.NewNodesCounter += 1
@@ -989,7 +993,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
         if (s, action) in mcts.Quality:
             # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
             print(
-                f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
+                f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
         mcts.ExistingNodesCounter = 0
         mcts.NewNodesCounter = 0
         r = game.getGameEnded()
