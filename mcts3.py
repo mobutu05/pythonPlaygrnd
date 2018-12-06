@@ -2,6 +2,7 @@ import copy
 import functools
 import os
 import pickle
+from collections import deque
 
 import numpy as np
 from keras import Input, Model
@@ -11,6 +12,176 @@ from keras.optimizers import Adam
 import mcts2
 import moara
 import matplotlib.pyplot as plt
+
+
+class Arena():
+    """
+    An Arena class where any 2 agents can be pit against each other.
+    """
+
+    def __init__(self, player1, player2, game, args, display=None):
+        """
+        Input:
+            player 1,2: two functions that takes board as input, return action
+            game: Game object
+            display: a function that takes board as input and prints it (e.g.
+                     display in othello/OthelloGame). Is necessary for verbose
+                     mode.
+
+        see othello/OthelloPlayers.py for an example. See pit.py for pitting
+        human players/other baselines with each other.
+        """
+        self.player1 = player1
+        self.player2 = player2
+        self.game = game
+        self.display = display
+        self.args = args
+
+    def playGame(self, verbose=False):
+        """
+        Executes one episode of a game.
+
+        Returns:
+            either
+                winner: player who won the game (1 if player1, -1 if player2)
+            or
+                draw result returned from the game that is neither 1, -1, nor 0.
+        """
+        players = [self.player2, None, self.player1]
+        it = 0
+        trainExamples = []
+        r = 0
+        NRs = {}
+        while r == 0:
+            it += 1
+            action = players[self.game.getCrtPlayer() + 1](self.game)
+            p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
+            trainExamples.append([self.game.getInternalRepresentation(), self.game.getCrtPlayer(), p])
+            self.game: mcts2.IGame = self.game.getNextState(action)
+            r = self.game.getGameEnded()
+            if it > 1000:
+                r = 0.001
+            if verbose:
+                print(f"Turn {it:03d} {str(self.game)} Player {self.game.getCrtPlayer()}")
+                # board.display(1)
+        if verbose:
+            print("Game over: Turn ", str(it), "Result ", str(r))
+            self.game.display()
+        self.iterationTrainExamples = [(x[0], x[2], r * ((-1) ** (x[1] != self.game.getCrtPlayer()))) for x in trainExamples]
+        return r
+
+    def playGames(self, num, verbose=False):
+        """
+        Plays num games in which player1 starts num/2 games and player2 starts
+        num/2 games.
+
+        Returns:
+            oneWon: games won by player1
+            twoWon: games won by player2
+            draws:  games won by nobody
+        """
+        self.trainExamplesHistory = []
+
+        eps = 0
+        maxeps = int(num)
+
+        # num = int(num / 2)
+        oneWon = 0
+        twoWon = 0
+        draws = 0
+        inverse = False
+        for i in range(num):
+            self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
+            gameResult = self.playGame(verbose=verbose)
+            if gameResult == 1:
+                if inverse:
+                    twoWon += 1
+                else:
+                    oneWon += 1
+            elif gameResult == -1:
+                if not inverse:
+                    twoWon += 1
+                else:
+                    oneWon += 1
+            else:
+                draws += 1
+            # bookkeeping + plot progress
+            eps += 1
+            self.trainExamplesHistory.append(self.iterationTrainExamples)
+            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+                # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+                #       " => remove the oldest trainExamples")
+                self.trainExamplesHistory.pop(0)
+            print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
+
+            self.player1, self.player2 = self.player2, self.player1
+            inverse = not inverse
+            # oneWon, twoWon = twoWon, oneWon
+            if oneWon > num / 2 or twoWon > num / 2:
+                break
+        # for i in range(num):
+        #     gameResult = self.playGame(verbose=verbose)
+        #     if gameResult == -1:
+        #         oneWon += 1
+        #     elif gameResult == 1:
+        #         twoWon += 1
+        #     else:
+        #         draws += 1
+        #     # bookkeeping + plot progress
+        #     print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
+        #
+        #
+        #     self.trainExamplesHistory.append(self.iterationTrainExamples)
+        #     if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
+        #         # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
+        #         #       " => remove the oldest trainExamples")
+        #         self.trainExamplesHistory.pop(0)
+
+        return oneWon, twoWon, draws
+
+
+class HumanPlayer():
+    def __init__(self, game):
+        self.game = game
+
+    def play(self, board):
+        # display(board)
+        valid = self.game.getValidMoves(board, 1)
+
+        # if pass is required
+        if valid[88] == 1:
+            return 88
+        # for i in range(len(valid)):
+        #     if valid[i]:
+        #         print(int(i/self.game.n), int(i%self.game.n))
+        while True:
+            input_string = input()
+            try:
+                input_array = [int(x) for x in input_string.split(' ')]
+            except:
+                input_array = []
+            if len(input_array) == 2:
+                a, b = input_array
+                try:
+                    move = Game.validPositions.index((a, b))
+                except:
+                    move = 90
+            elif len(input_array) == 4:
+                a, b, c, d = input_array
+                try:
+                    move = 24 + Game.validActions.index(((a, b), (c, d)))
+                except:
+                    move = 90
+            else:
+                move = 90  # invalid
+
+            if move <= 88 and valid[move]:
+                break
+            else:
+                print('Invalid')
+
+        return move
+
 
 
 class MoaraNew:
@@ -300,26 +471,26 @@ class MoaraNew(mcts2.IGame):
         board_status = str(self)
         if board_status in MoaraNew.ValidMovesFromState:
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
-            #     return MoaraNew.ValidMovesFromState[board_status]
+            return MoaraNew.ValidMovesFromState[board_status]
             # else:
 
             # need to simulate
             # if the position has already been repeated than make sure that no subsequent move
             # simulate each move, so that it wouldn't get into a invalid condition
             # 3 state repetition or 50 moves without capture
-            possibleMoves = []
-            for move in MoaraNew.ValidMovesFromState[board_status]:
-                # if (s, move) not in self.memo:
-                if (board_status, move) not in MoaraNew.ValidMovesFromState:
-                    newState = self.getNextState(move)
-                    s = str(newState)
-                    MoaraNew.ValidMovesFromState[(board_status, move)] = s
-                else:
-                    s = MoaraNew.ValidMovesFromState[(board_status, move)]
-                if (s not in self.history or self.history[s] < 3) and self.noMovesWithoutCapture < 50:
-                    possibleMoves.append(move)
-
-            return possibleMoves
+            # possibleMoves = []
+            # for move in MoaraNew.ValidMovesFromState[board_status]:
+            #     # if (s, move) not in self.memo:
+            #     if (board_status, move) not in MoaraNew.ValidMovesFromState:
+            #         newState = self.getNextState(move)
+            #         s = str(newState)
+            #         MoaraNew.ValidMovesFromState[(board_status, move)] = s
+            #     else:
+            #         s = MoaraNew.ValidMovesFromState[(board_status, move)]
+            #     if (s not in self.history or self.history[s] < 3) and self.noMovesWithoutCapture < 50:
+            #         possibleMoves.append(move)
+            #
+            # return possibleMoves
 
         result = []
         moves = []
@@ -525,10 +696,10 @@ class MoaraNew(mcts2.IGame):
                 for j in range(self.feature_len):
                     result.append([0] * self.boardSize)
             else:
-                l = list(self.moves[i])
+                l = list(self.moves[len(self.moves) - 1 - i])
                 board = [1 if l[x] == 'x' else -1 if l[x] == '0' else 0 for x in range(self.boardSize)]
-                unusedPlayer1 = l[self.boardSize]
-                unusedPlayer2 = l[self.boardSize+1]
+                unusedPlayer1 =int(l[self.boardSize])
+                unusedPlayer2 = int(l[self.boardSize+1])
                 crtPlayer = 1 if l[self.boardSize+2] == 'x' else -1
 
                 # normal board for player 1
@@ -543,21 +714,21 @@ class MoaraNew(mcts2.IGame):
                 # rotated board for player 2
                 result.append([1 if x == -1 else 0 for x in rot])
                 #color
-                result.append([crtPlayer for _ in range(self.boardSize)])
+                result.append([crtPlayer] * self.boardSize)
 
                 # unused pieces for player 1
-                result.append([unusedPlayer1 for _ in range(self.boardSize)])
+                result.append([unusedPlayer1] * self.boardSize)
                 # unused pieces for player 2
-                result.append([unusedPlayer2 for _ in range(self.boardSize)])
+                result.append([unusedPlayer2] * self.boardSize)
 
         # repetition
         s = str(self)
         rep = self.history[s] if s in self.history else 0
-        result.append([rep for _ in range(self.boardSize)])
+        result.append([rep] * self.boardSize)
         # total moves
-        result.append([self.noMoves for _ in range(self.boardSize)])
+        result.append([self.noMoves] * self.boardSize)
         # total moves without capture
-        result.append([self.noMovesWithoutCapture for _ in range(self.boardSize)])
+        result.append([self.noMovesWithoutCapture] * self.boardSize)
         res2 = np.array(result).reshape(planes, self.board_X, self.board_Y)
         return res2
 
@@ -569,4 +740,10 @@ n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-mcts2.learn(moaraGame, mcts, n)
+# mcts2.learn(moaraGame, mcts, n)
+
+otherPlayer = HumanPlayer(moaraGame).play
+# otherPlayer = RandomPlayer(g).play
+neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
+a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
+result = a.playGames(10, verbose=True)

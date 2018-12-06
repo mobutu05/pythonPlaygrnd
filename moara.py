@@ -1614,7 +1614,7 @@ class RandomPlayer():
 
 args = dotdict({
         'numIterations': 1000,
-        'numEpisodes': 2,
+        'numEpisodes': 10,
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,

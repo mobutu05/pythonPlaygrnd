@@ -865,7 +865,7 @@ class MCTS:
         if s not in self.Prediction:
             inputToNN = game.getInternalRepresentation()
             policy_predicted, value = self.nnet.predict(inputToNN)
-            validMoves = game.getValidMoves(1)
+            validMoves = game.getValidMoves(game.getCrtPlayer())
             moves = [1 if x in validMoves else 0 for x in range(game.getActionSize())]
             policy = policy_predicted * moves  # masking invalid moves
             sum_Policies = np.sum(policy)
@@ -921,7 +921,7 @@ class MCTS:
 
         # UCT calculation
         s = str(game)
-        for a in game.getValidMoves(1):
+        for a in game.getValidMoves(game.getCrtPlayer()):
             if (s, a) in self.Quality:
                 q = self.Quality[(s, a)]
                 p = self.Prediction[s][a]
