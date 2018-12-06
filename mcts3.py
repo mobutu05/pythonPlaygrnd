@@ -188,16 +188,18 @@ class MoaraNew(mcts2.IGame):
         self.canonized = False  # true if canonical has revert the sign of the player
         self.time_len = 8  # keep current state and previous 7
         self.feature_len = 7  # number of planes describing current board
-        self.timePlanes = [[[0 for _ in range(self.boardSize)] for _ in range(self.feature_len)] for _ in
-                           range(self.time_len)]
         self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
                                   self.boardSize * self.boardSize)  # move/jump pieces
+        s = str(self)
+        self.history[s] = 1
+        self.moves.append(s)
 
     def SaveData(self):
         self.SaveValidMoves()
 
     def reset(self):
         self.__init__()
+
 
 
     # string representation of the current position in the game
@@ -264,7 +266,7 @@ class MoaraNew(mcts2.IGame):
         #   - future:
         #       - 50 moves with no capture
         #       - position replay 3 times
-        s = self.toShortString()
+        s = str(self)
         # no more than 3 repetitions allowed:win if the opponent choose a state already existing
         if s in self.history and self.history[s] > 3:
             return 0.00000000001
@@ -295,7 +297,7 @@ class MoaraNew(mcts2.IGame):
         dest = -1
 
         # memoization
-        board_status = self.toShortString()
+        board_status = str(self)
         if board_status in MoaraNew.ValidMovesFromState:
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
             #     return MoaraNew.ValidMovesFromState[board_status]
@@ -310,17 +312,11 @@ class MoaraNew(mcts2.IGame):
                 # if (s, move) not in self.memo:
                 if (board_status, move) not in MoaraNew.ValidMovesFromState:
                     newState = self.getNextState(move)
-                    s = newState.toShortString()
-                    if self.canonized:
-                        # transform s
-                        l = list(s)
-                        l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
-                        s = ''.join(l)
+                    s = str(newState)
                     MoaraNew.ValidMovesFromState[(board_status, move)] = s
                 else:
                     s = MoaraNew.ValidMovesFromState[(board_status, move)]
-                if (s not in self.history or self.history[
-                    s] < 3) and self.noMovesWithoutCapture < 50:
+                if (s not in self.history or self.history[s] < 3) and self.noMovesWithoutCapture < 50:
                     possibleMoves.append(move)
 
             return possibleMoves
@@ -453,13 +449,7 @@ class MoaraNew(mcts2.IGame):
         return newGameState
 
     def updateHistory(self):
-        s = self.toShortString()
-        if self.canonized:
-            # transform s
-            l = list(s)
-            l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
-            s = ''.join(l)
-            # s = self.toShortString()
+        s = str(self)
         if s not in self.history:
             self.history[s] = 1
         else:
@@ -528,50 +518,38 @@ class MoaraNew(mcts2.IGame):
                   1 +  # total moves, uniform value over array
                   1)  # moves without capture, uniform value over arrays
 
-        # propagate back in temporal array , if the move number increased
-        if (self.noMoves > self.timePlanes[planes-2][0]):
-            for i in range(self.time_len - 1):  # i = 0, is the oldest
-                if (i == 0):
-                    #use current board
-                    board = self.internalArray
-                    crtPlayer = self.playerAtMove
-                else:
-                    #use historical moves, extract from history
-                    l = list(s)
-                    l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
-                    s = ''.join(l)
+        # propagate back in temporal array
+        for i in range(self.time_len):  # i = 0, is the oldest
+            #use historical moves, extract from history, if enough moves where made
+            if len(self.moves) <= i:
+                for j in range(self.feature_len):
+                    result.append([0] * self.boardSize)
+            else:
+                l = list(self.moves[i])
+                board = [1 if l[x] == 'x' else -1 if l[x] == '0' else 0 for x in range(self.boardSize)]
+                unusedPlayer1 = l[self.boardSize]
+                unusedPlayer2 = l[self.boardSize+1]
+                crtPlayer = 1 if l[self.boardSize+2] == 'x' else -1
 
                 # normal board for player 1
-                self.timePlanes[self.time_len - 1][0] = [1 if x == 1 else 0 for x in board]
-                # normal board for opponent
-                self.timePlanes[self.time_len - 1][1] = [1 if x == -self.playerAtMove else 0 for x in
-                                                                         self.internalArray]
+                result.append([1 if x == 1 else 0 for x in board])
+                # normal board for player 2
+                result.append([1 if x == -1 else 0 for x in board])
                 arr2 = np.array(self.MILLS).reshape(48)
                 # rotate board
-                rot = [self.internalArray[arr2[x + self.boardSize]] for x in range(self.boardSize)]
-                # rotated board for player
-                self.timePlanes[self.time_len - 1][2] = [1 if x == self.playerAtMove else 0 for x in
-                                                                         rot]
-                # rotated board for opponent
-                self.timePlanes[self.time_len - 1][3] = [1 if x == -self.playerAtMove else 0 for x in
-                                                                         rot]
+                rot = [board[arr2[x + self.boardSize]] for x in range(self.boardSize)]
+                # rotated board for player 1
+                result.append([1 if x == 1 else 0 for x in rot])
+                # rotated board for player 2
+                result.append([1 if x == -1 else 0 for x in rot])
+                #color
+                result.append([crtPlayer for _ in range(self.boardSize)])
 
-                self.timePlanes[self.time_len - 1][4] = [self.playerAtMove for _ in
-                                                                         range(self.boardSize)]
+                # unused pieces for player 1
+                result.append([unusedPlayer1 for _ in range(self.boardSize)])
+                # unused pieces for player 2
+                result.append([unusedPlayer2 for _ in range(self.boardSize)])
 
-                # unused pieces for player
-                self.timePlanes[self.time_len - 1][5] = [
-                    self.getUnusedPlayerCount(self.playerAtMove) for _ in
-                    range(self.boardSize)]
-                # unused pieces for opponent
-                self.timePlanes[self.time_len - 1][6] = [
-                    self.getUnusedPlayerCount(-self.playerAtMove) for _ in
-                    range(self.boardSize)]
-
-        # append time data to result
-        for i in range(self.time_len):
-            for j in range(self.feature_len):
-                result.append(self.timePlanes[i][j])
         # repetition
         s = str(self)
         rep = self.history[s] if s in self.history else 0
