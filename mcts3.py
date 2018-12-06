@@ -445,12 +445,12 @@ class MoaraNew(mcts2.IGame):
         if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(self.playerAtMove) < 3:
-            return -9
+            return -1
         if self.getPlayerCount(-self.playerAtMove) < 3:
-            return 9
+            return 1
         player_valid_moves_list = self.getValidMoves(self.playerAtMove)
         if player_valid_moves_list == []:
-            return -9
+            return -1
         return 0
 
         # list of legal moves from the current position for the player
@@ -740,10 +740,10 @@ n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-# mcts2.learn(moaraGame, mcts, n)
+mcts2.learn(moaraGame, mcts, n)
 
-otherPlayer = HumanPlayer(moaraGame).play
-# otherPlayer = RandomPlayer(g).play
-neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
-a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
-result = a.playGames(10, verbose=True)
+# otherPlayer = HumanPlayer(moaraGame).play
+# # otherPlayer = RandomPlayer(g).play
+# neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
+# a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
+# result = a.playGames(10, verbose=True)
