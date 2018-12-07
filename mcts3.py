@@ -146,14 +146,8 @@ class HumanPlayer():
 
     def play(self, board):
         # display(board)
-        valid = self.game.getValidMoves(board, 1)
+        valid = self.game.getValidMoves(self.game.getCrtPlayer())
 
-        # if pass is required
-        if valid[88] == 1:
-            return 88
-        # for i in range(len(valid)):
-        #     if valid[i]:
-        #         print(int(i/self.game.n), int(i%self.game.n))
         while True:
             input_string = input()
             try:
@@ -163,13 +157,13 @@ class HumanPlayer():
             if len(input_array) == 2:
                 a, b = input_array
                 try:
-                    move = Game.validPositions.index((a, b))
+                    move = moara.Game.validPositions.index((a, b))
                 except:
                     move = 90
             elif len(input_array) == 4:
                 a, b, c, d = input_array
                 try:
-                    move = 24 + Game.validActions.index(((a, b), (c, d)))
+                    move = 24 + moara.Game.validActions.index(((a, b), (c, d)))
                 except:
                     move = 90
             else:
@@ -457,11 +451,11 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        # return 0
-        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 1
-        else:
-            return 0.0
+        return 0
+        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+        #     return 1
+        # else:
+        #     return 0.0
 
     def getValidMoves(self, player):
         orig = -1
@@ -740,10 +734,10 @@ n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-mcts2.learn(moaraGame, mcts, n)
+# mcts2.learn(moaraGame, mcts, n)
 
-# otherPlayer = HumanPlayer(moaraGame).play
-# # otherPlayer = RandomPlayer(g).play
-# neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
-# a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
-# result = a.playGames(10, verbose=True)
+otherPlayer = HumanPlayer(moaraGame).play
+# otherPlayer = RandomPlayer(g).play
+neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
+a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
+result = a.playGames(10, verbose=True)

@@ -908,35 +908,40 @@ class MCTS:
 
     def getBestAction(self, game: IGame):
         EPS = 1e-8
-        cur_best = -float('inf')
-        best_act = -1
-        # u_values = [
-        #     (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
-        #     if (s, a) in self.Qsa
-        #     else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-        # # get action with the best ucb
-        # best_pair = functools.reduce(lambda acc, pair: pair
-        # if pair[1] > acc[1] else acc, zip(valid_actions, u_values), (best_act, cur_best))
-        # a = best_pair[0]
-
-        # UCT calculation
         s = str(game)
-        for a in game.getValidMoves(game.getCrtPlayer()):
-            if (s, a) in self.Quality:
-                q = self.Quality[(s, a)]
-                p = self.Prediction[s][a]
-                n = self.NumberOfVisits[s]
-                na = self.NumberOfActionTaken[(s, a)]
-                u = q + moara.args.cpuct * p * math.sqrt(n) / (1 + na)
-            else:
-                p_ = self.Prediction[s][a]
-                n_ = self.NumberOfVisits[s]
-                u = moara.args.cpuct * p_ * math.sqrt(n_ + EPS)  # Q = 0 ?
+        # cur_best = -float('inf')
+        # best_act = -1
+        # # UCT calculation
+        # for a in game.getValidMoves(game.getCrtPlayer()):
+        #     if (s, a) in self.Quality:
+        #         q = self.Quality[(s, a)]
+        #         p = self.Prediction[s][a]
+        #         n = self.NumberOfVisits[s]
+        #         na = self.NumberOfActionTaken[(s, a)]
+        #         u = q + moara.args.cpuct * p * math.sqrt(n) / (1 + na)
+        #     else:
+        #         p_ = self.Prediction[s][a]
+        #         n_ = self.NumberOfVisits[s]
+        #         u = moara.args.cpuct * p_ * math.sqrt(n_ + EPS)  # Q = 0 ?
+        #
+        #     if u > cur_best:
+        #         cur_best = u
+        #         best_act = a
+        # a = best_act
 
-            if u > cur_best:
-                cur_best = u
-                best_act = a
-        a = best_act
+        #compute list of u values, functionally
+        valid_actions = game.getValidMoves(game.getCrtPlayer())
+        u_values = [
+            (self.Quality[(s, a)] + moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s]) / (1 + self.NumberOfActionTaken[(s, a)]))
+            if (s, a) in self.Quality
+            else (moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s] + EPS)) for a in valid_actions]
+        # get action with the best ucb, depending on current player
+        if game.getCrtPlayer() == 1:#if first player, choose max value
+            best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values))
+        else:#if second player, choose min value
+            best_pair = functools.reduce(lambda acc, pair: pair if pair[1] < acc[1] else acc, zip(valid_actions, u_values))
+
+        a = best_pair[0]
         return a
 
     def getActionProbabilities(self, game: IGame, temperature: float = 1, simulate: bool = True):
@@ -999,6 +1004,8 @@ def executeEpisode(game: IGame, mcts: MCTS):
         r = game.getGameEnded()
 
         if r != 0:
+            if abs(r) < 1:
+                print(f"Game ended after {game.noMovesWithoutCapture} moves")
             game.SaveData()
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
