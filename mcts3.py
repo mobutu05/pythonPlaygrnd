@@ -57,13 +57,13 @@ class Arena():
             action = players[self.game.getCrtPlayer() + 1](self.game)
             p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
             trainExamples.append([self.game.getInternalRepresentation(), self.game.getCrtPlayer(), p])
-            self.game: mcts2.IGame = self.game.getNextState(action)
+            self.game = self.game.getNextState(action)
             r = self.game.getGameEnded()
             if it > 1000:
                 r = 0.001
             if verbose:
                 print(f"Turn {it:03d} {str(self.game)} Player {self.game.getCrtPlayer()}")
-                # board.display(1)
+                self.game.display()
         if verbose:
             print("Game over: Turn ", str(it), "Result ", str(r))
             self.game.display()
@@ -141,12 +141,12 @@ class Arena():
 
 
 class HumanPlayer():
-    def __init__(self, game):
-        self.game = game
+    def __init__(self):
+        pass
 
-    def play(self, board):
+    def play(self, game):
         # display(board)
-        valid = self.game.getValidMoves(self.game.getCrtPlayer())
+        valid = game.getValidMoves(game.getCrtPlayer())
 
         while True:
             input_string = input()
@@ -154,22 +154,29 @@ class HumanPlayer():
                 input_array = [int(x) for x in input_string.split(' ')]
             except:
                 input_array = []
+            #put
             if len(input_array) == 2:
                 a, b = input_array
                 try:
                     move = moara.Game.validPositions.index((a, b))
                 except:
-                    move = 90
+                    move = -1
             elif len(input_array) == 4:
                 a, b, c, d = input_array
                 try:
                     move = 24 + moara.Game.validActions.index(((a, b), (c, d)))
                 except:
-                    move = 90
+                    move = -1
+            elif len(input_array) == 6:
+                a, b, c, d = input_array
+                try:
+                    move = 24 + moara.Game.validActions.index(((a, b), (c, d)))
+                except:
+                    move = -1
             else:
                 move = 90  # invalid
 
-            if move <= 88 and valid[move]:
+            if move in valid:
                 break
             else:
                 print('Invalid')
@@ -451,11 +458,11 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        return 0
-        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-        #     return 1
-        # else:
-        #     return 0.0
+        # return 0
+        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+            return 1
+        else:
+            return 0.0
 
     def getValidMoves(self, player):
         orig = -1
@@ -736,8 +743,8 @@ n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 mcts = mcts2.MCTS(n)
 # mcts2.learn(moaraGame, mcts, n)
 
-otherPlayer = HumanPlayer(moaraGame).play
-# otherPlayer = RandomPlayer(g).play
-neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
-a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
-result = a.playGames(10, verbose=True)
+# otherPlayer = lambda x: HumanPlayer().play(x)
+# # otherPlayer = RandomPlayer(g).play
+# neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
+# a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
+# result = a.playGames(10, verbose=True)
