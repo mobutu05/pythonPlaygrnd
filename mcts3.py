@@ -8,18 +8,28 @@ import numpy as np
 from keras import Input, Model
 from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense
 from keras.optimizers import Adam
+from numpy.random.mtrand import shuffle
 
 import mcts2
 import moara
 import matplotlib.pyplot as plt
+from mcts2 import IGame
 
+class Player:
+    def __init__(self, name, method):
+        self.name = name
+        self.method = method
+        self.score = 0
 
-class Arena():
+    def __repr__(self):
+        return self.name
+
+class Arena:
     """
     An Arena class where any 2 agents can be pit against each other.
     """
 
-    def __init__(self, player1, player2, game, args, display=None):
+    def __init__(self, player1: Player, player2: Player, game: IGame, args, display=None):
         """
         Input:
             player 1,2: two functions that takes board as input, return action
@@ -31,9 +41,10 @@ class Arena():
         see othello/OthelloPlayers.py for an example. See pit.py for pitting
         human players/other baselines with each other.
         """
-        self.player1 = player1
-        self.player2 = player2
-        self.game = game
+        self.player1:Player = player1
+        self.player2:Player = player2
+
+        self.game: IGame = game
         self.display = display
         self.args = args
 
@@ -50,24 +61,28 @@ class Arena():
         players = [self.player2, None, self.player1]
         it = 0
         trainExamples = []
+        self.game.reset()
         r = 0
         NRs = {}
         while r == 0:
             it += 1
-            action = players[self.game.getCrtPlayer() + 1](self.game)
+            action = players[self.game.getCrtPlayer() + 1].method(self.game)
             p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
             trainExamples.append([self.game.getInternalRepresentation(), self.game.getCrtPlayer(), p])
             self.game = self.game.getNextState(action)
             r = self.game.getGameEnded()
             if it > 1000:
                 r = 0.001
+
             if verbose:
-                print(f"Turn {it:03d} {str(self.game)} Player {self.game.getCrtPlayer()}")
                 self.game.display()
+                print(f"Turn {it:03d} {str(self.game)} Player { players[-self.game.getCrtPlayer() + 1].name}")
+
         if verbose:
-            print("Game over: Turn ", str(it), "Result ", str(r))
             self.game.display()
-        self.iterationTrainExamples = [(x[0], x[2], r * ((-1) ** (x[1] != self.game.getCrtPlayer()))) for x in trainExamples]
+            print(f"Game over: Turn {it}. Result {self.player1.name}-{self.player2.name} is {r}")
+        self.iterationTrainExamples = [(x[0], x[2], r * ((-1) ** (x[1] != self.game.getCrtPlayer()))) for x in
+                                       trainExamples]
         return r
 
     def playGames(self, num, verbose=False):
@@ -86,23 +101,15 @@ class Arena():
         maxeps = int(num)
 
         # num = int(num / 2)
-        oneWon = 0
-        twoWon = 0
         draws = 0
         inverse = False
         for i in range(num):
             self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
             if gameResult == 1:
-                if inverse:
-                    twoWon += 1
-                else:
-                    oneWon += 1
+                self.player1.score += 1
             elif gameResult == -1:
-                if not inverse:
-                    twoWon += 1
-                else:
-                    oneWon += 1
+                self.player2.score += 1
             else:
                 draws += 1
             # bookkeeping + plot progress
@@ -112,12 +119,11 @@ class Arena():
                 # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                 #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
-            print(f"Round {i}: {gameResult};  {oneWon} - {twoWon} - {draws}")
+            print(f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
 
             self.player1, self.player2 = self.player2, self.player1
-            inverse = not inverse
-            # oneWon, twoWon = twoWon, oneWon
-            if oneWon > num / 2 or twoWon > num / 2:
+
+            if self.player1.score > num / 2 or self.player2.score > num / 2:
                 break
         # for i in range(num):
         #     gameResult = self.playGame(verbose=verbose)
@@ -137,7 +143,17 @@ class Arena():
         #         #       " => remove the oldest trainExamples")
         #         self.trainExamplesHistory.pop(0)
 
-        return oneWon, twoWon, draws
+        return draws
+
+
+class RandomPlayer():
+    def __init__(self):
+        pass
+
+    def play(self, game):
+        valids = game.getValidMoves(game.getCrtPlayer())
+        shuffle(valids)
+        return valids[0]
 
 
 class HumanPlayer():
@@ -154,7 +170,7 @@ class HumanPlayer():
                 input_array = [int(x) for x in input_string.split(' ')]
             except:
                 input_array = []
-            #put
+            # put
             if len(input_array) == 2:
                 a, b = input_array
                 try:
@@ -164,13 +180,31 @@ class HumanPlayer():
             elif len(input_array) == 4:
                 a, b, c, d = input_array
                 try:
-                    move = 24 + moara.Game.validActions.index(((a, b), (c, d)))
+                    pos1 = moara.Game.validPositions.index((a, b))
+                    pos2 = moara.Game.validPositions.index((c, d))
+                    # 1 move/jump
+                    move = game.boardSize + pos1 * game.boardSize + pos2
+                    if move not in valid:
+                        # 2 capture
+                        # find all opponents
+                        all_opponent_pieces = [x for x in range(game.boardSize) if
+                                               game.internalArray[x] == -game.playerAtMove]
+                        index = all_opponent_pieces.index(pos2)
+                        move = pos1 + (index + 1) * game.possibleMovesSize
                 except:
                     move = -1
             elif len(input_array) == 6:
-                a, b, c, d = input_array
+                a, b, c, d, e, f = input_array
                 try:
-                    move = 24 + moara.Game.validActions.index(((a, b), (c, d)))
+                    # move/jump and capture
+                    pos1 = moara.Game.validPositions.index((a, b))
+                    pos2 = moara.Game.validPositions.index((c, d))
+                    pos3 = moara.Game.validPositions.index((e, f))
+                    move = game.boardSize + pos1 * game.boardSize + pos2
+                    all_opponent_pieces = [x for x in range(game.boardSize) if
+                                           game.internalArray[x] == -game.playerAtMove]
+                    index = all_opponent_pieces.index(pos3)
+                    move = move + (index + 1) * game.possibleMovesSize
                 except:
                     move = -1
             else:
@@ -182,7 +216,6 @@ class HumanPlayer():
                 print('Invalid')
 
         return move
-
 
 
 class MoaraNew:
@@ -211,13 +244,19 @@ class NeuralNetNew(mcts2.INeuralNet):
         x_image = BatchNormalization(axis=3)(
             Reshape((self.board_x, self.board_y, self.planes))(
                 self.input_boards))  # batch_size  x board_x x board_y x 1
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            x_image)))  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv4)
-        s_fc1 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        s_fc2 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+        s_fc1 = Dropout(self.args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
+        s_fc2 = Dropout(self.args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(
             s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
@@ -314,26 +353,6 @@ class MoaraNew(mcts2.IGame):
     # this is independent of a particular game, so can be serialized
     ValidMovesFromState = {}
 
-    def LoadValidMoves(self):
-        folder = moara.args.checkpoint
-        filename = f"valid.moves.data"
-        filepath = os.path.join(folder, filename)
-        if os.path.exists(filepath):
-            infile = open(filepath, 'rb')
-            MoaraNew.ValidMovesFromState = pickle.load(infile)
-            infile.close()
-        else:
-            print("No model in path '{}'".format(filepath))
-            ValidMovesFromState = {}
-
-    def SaveValidMoves(self):
-        folder = moara.args.checkpoint
-        filename = f"valid.moves.data"
-        filepath = os.path.join(folder, filename)
-        outfile = open(filepath, 'wb')
-        pickle.dump(MoaraNew.ValidMovesFromState, outfile)
-        outfile.close()
-
     def __init__(self, ):
         self.board_X = 8
         self.board_Y = 3
@@ -359,12 +378,10 @@ class MoaraNew(mcts2.IGame):
         self.moves.append(s)
 
     def SaveData(self):
-        self.SaveValidMoves()
+        pass
 
     def reset(self):
         self.__init__()
-
-
 
     # string representation of the current position in the game
     def __repr__(self):
@@ -450,11 +467,11 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        # return 0
-        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 1
-        else:
-            return 0.0
+        return 0
+        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+        #     return 1
+        # else:
+        #     return 0.0
 
     def getValidMoves(self, player):
         orig = -1
@@ -606,8 +623,6 @@ class MoaraNew(mcts2.IGame):
                 newGameState.internalArray[opponent_piece] = 0
                 newGameState.noMovesWithoutCapture = 0  # reset it
 
-
-
         newGameState.updateHistory()
         # newGameState.display()
         return newGameState
@@ -684,16 +699,16 @@ class MoaraNew(mcts2.IGame):
 
         # propagate back in temporal array
         for i in range(self.time_len):  # i = 0, is the oldest
-            #use historical moves, extract from history, if enough moves where made
+            # use historical moves, extract from history, if enough moves where made
             if len(self.moves) <= i:
                 for j in range(self.feature_len):
                     result.append([0] * self.boardSize)
             else:
                 l = list(self.moves[len(self.moves) - 1 - i])
                 board = [1 if l[x] == 'x' else -1 if l[x] == '0' else 0 for x in range(self.boardSize)]
-                unusedPlayer1 =int(l[self.boardSize])
-                unusedPlayer2 = int(l[self.boardSize+1])
-                crtPlayer = 1 if l[self.boardSize+2] == 'x' else -1
+                unusedPlayer1 = int(l[self.boardSize])
+                unusedPlayer2 = int(l[self.boardSize + 1])
+                crtPlayer = 1 if l[self.boardSize + 2] == 'x' else -1
 
                 # normal board for player 1
                 result.append([1 if x == 1 else 0 for x in board])
@@ -706,7 +721,7 @@ class MoaraNew(mcts2.IGame):
                 result.append([1 if x == 1 else 0 for x in rot])
                 # rotated board for player 2
                 result.append([1 if x == -1 else 0 for x in rot])
-                #color
+                # color
                 result.append([crtPlayer] * self.boardSize)
 
                 # unused pieces for player 1
@@ -726,17 +741,36 @@ class MoaraNew(mcts2.IGame):
         return res2
 
 
+def doArena(n: mcts2.INeuralNet, mcts: mcts2.MCTS, doTrain=True):
+    # otherPlayer = lambda x: HumanPlayer().play(x)
+    otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
+    neuralPlayer = Player("neural", lambda x: np.argmax(mcts.getActionProbabilities(x, 0)))
+    a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
+
+    result = a.playGames(10, verbose=False)
+    if doTrain:
+        # train the network based on the arena games
+        trainExamples = []
+        for e in a.trainExamplesHistory:
+            trainExamples.extend(e)
+        shuffle(trainExamples)
+        if trainExamples != []:
+            n.train(trainExamples)
+
+            # test against the previous
+            # if i % 5 == 0:
+            #     # self.PitAgainst('no36.neural.data-ITER-390')
+            #     PitAgainst(moara.filename - 1)
+            n.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+
+
 print("mcts 3")
 moaraGame: MoaraNew = MoaraNew()
-moaraGame.LoadValidMoves()
+# moaraGame.LoadValidMoves()
 n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-# mcts2.learn(moaraGame, mcts, n)
+mcts2.learn(moaraGame, mcts, n, doArena)
 
-# otherPlayer = lambda x: HumanPlayer().play(x)
-# # otherPlayer = RandomPlayer(g).play
-# neuralPlayer = lambda x: np.argmax(mcts.getActionProbabilities(x, 0))
-# a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
-# result = a.playGames(10, verbose=True)
+# doArena(n, mcts)

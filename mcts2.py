@@ -455,6 +455,10 @@ class Moara(IGame):
     def copy(self):
         return copy.deepcopy(self)
 
+    # add reward for capture
+    def getExtraReward(self):
+        return 0
+
     # string representation of the current position in the game
     def __repr__(self):
         hh = ''
@@ -1010,7 +1014,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
-def learn(game: IGame, mcts:MCTS, nnet: INeuralNet):
+def learn(game: IGame, mcts:MCTS, nnet: INeuralNet, doArena = None):
     for i in range(0, moara.args.numIterations + 1):
         iterationTrainExamples = deque([], maxlen=moara.args.maxlenOfQueue)
         print('------ITER ' + str(i) + '------')
@@ -1034,12 +1038,12 @@ def learn(game: IGame, mcts:MCTS, nnet: INeuralNet):
         shuffle(trainExamples)
         if trainExamples != []:
             nnet.train(trainExamples)
-
-            # test against the previous
-            # if i % 5 == 0:
-            #     # self.PitAgainst('no36.neural.data-ITER-390')
-            #     PitAgainst(moara.filename - 1)
             nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+            # test against the randome
+            if i % 5 == 0:
+                if doArena is not None:
+                    doArena(nnet, mcts, False)
+
 
 # def PitAgainst(neuralDataFileNumber):
 #
@@ -1060,4 +1064,11 @@ if __name__ == "__main__":
     print("mcts 2")
     moaraGame: Moara = Moara()
     n = NeuralNet(moaraGame.getActionSize(), 0, moara.args)
-    learn(moaraGame)
+    n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+
+
+
+
+    mcts = MCTS(n)
+    learn(moaraGame, mcts, n, None)
+

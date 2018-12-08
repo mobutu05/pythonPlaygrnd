@@ -1245,6 +1245,7 @@ class NeuralNet():
 
     def evaluate(self, examples):
         input_boards, target_pis, target_vs = list(zip(*examples))
+        input_boards, target_pis, target_vs = list(zip(*examples))
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
@@ -1493,7 +1494,7 @@ class Coach():
                 example = self.executeEpisode()
                 if example != []:
                     iterationTrainExamples += example
-            self.nnet.evaluate(iterationTrainExamples)
+            # self.nnet.evaluate(iterationTrainExamples)
             # save the iteration examples to the history
             self.trainExamplesHistory.append(iterationTrainExamples)
 
@@ -1517,7 +1518,25 @@ class Coach():
                 # test against the best no36
                 if i % 5 == 0:
                     # self.PitAgainst('no36.neural.data-ITER-390')
-                    self.PitAgainst(args.filename - 1)
+                    # self.PitAgainst(args.filename - 1)
+
+                    # function
+                    # otherPlayer = HumanPlayer(g).play
+                    otherPlayer = RandomPlayer(g).play
+                    # mcts = MCTS(g,n, args)
+                    neuralPlayer = lambda x: np.argmax(self.mcts.getActionProb(x, temperature = 0))
+                    a = Arena(neuralPlayer, otherPlayer, g, args, self.mcts)
+                    result = a.playGames(10, verbose=True)
+                    #
+                    # trainExamples = []
+                    # for e in a.trainExamplesHistory:
+                    #     trainExamples.extend(e)
+                    # for i in range(args.numIters // 10):
+                    #     print(f"ITERATION {i}")
+                    #     shuffle(trainExamples)
+                    #     n.train(trainExamples)
+                    #     n.save_checkpoint(folder= args.checkpoint, filename='new.neuralnet.data')
+                    print(result)
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename_no=args.filename)
 
             # self.test()
@@ -1628,7 +1647,7 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': '181207Extra',
+        'filename': '181208Old',
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
