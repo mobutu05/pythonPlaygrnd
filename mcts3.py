@@ -77,6 +77,8 @@ class Arena:
             if verbose:
                 self.game.display()
                 print(f"Turn {it:03d} {str(self.game)} Player { players[-self.game.getCrtPlayer() + 1].name}")
+            else:
+                print('.',end="")
 
         if verbose:
             self.game.display()
@@ -119,6 +121,7 @@ class Arena:
                 # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                 #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
+            print('-')
             print(f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
 
             self.player1, self.player2 = self.player2, self.player1
@@ -228,13 +231,7 @@ class NeuralNetNew(mcts2.INeuralNet):
         self.action_size = game.getActionSize()
         self.board_x = game.board_X  # lines
         self.board_y = game.board_Y  # columns
-        self.planes = (8 * (1 +  # board for player 1
-                            1 +  # board for player 2
-                            1 +  # rotated board for player 1
-                            1 +  # rotated board for player 2
-                            1 +  # color
-                            1 +  # unused pieces for player 1
-                            1) +  # unused pieces for player 2
+        self.planes = (game.time_len * game.feature_len +
                        1 +  # no repetitions for current board, uniform value over array
                        1 +  # total moves, uniform value over array
                        1)  # moves without capture, uniform value over array
@@ -360,22 +357,15 @@ class MoaraNew(mcts2.IGame):
         self.unusedPieces = [9, 9]  # for opponent, player
         self.playerAtMove = 1
         self.internalArray = np.array([0 for _ in range(self.boardSize)])
-        # history of positions
-        self.history = {}
-        # list of moves
-        self.moves = []
+
         # number of moves since last capture
         self.noMovesWithoutCapture = 0
         # number of total moves
         self.noMoves = 0
-        self.canonized = False  # true if canonical has revert the sign of the player
-        self.time_len = 8  # keep current state and previous 7
+        self.time_len = 1  # keep current state and previous 0
         self.feature_len = 7  # number of planes describing current board
         self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
                                   self.boardSize * self.boardSize)  # move/jump pieces
-        s = str(self)
-        self.history[s] = 1
-        self.moves.append(s)
 
     def SaveData(self):
         pass
@@ -401,7 +391,18 @@ class MoaraNew(mcts2.IGame):
         return copy.deepcopy(self)
 
     def getCanonicalForm(self):
-        return self.copy()
+        if self.playerAtMove == 1:
+            self.canonized = False
+            return self.copy()
+        else:
+            temp = self.copy()
+            temp.canonized = True
+            temp.internalArray = np.array(
+                [self.internalArray[0] * self.playerAtMove, self.internalArray[2], self.internalArray[1],
+                 self.internalArray[3] * self.playerAtMove])
+            temp.playerAtMove = 1
+            # also revert for history as well
+            return temp
 
     def getCrtPlayer(self) -> int:
         return self.playerAtMove
@@ -448,9 +449,6 @@ class MoaraNew(mcts2.IGame):
         #       - 50 moves with no capture
         #       - position replay 3 times
         s = str(self)
-        # no more than 3 repetitions allowed:win if the opponent choose a state already existing
-        if s in self.history and self.history[s] > 3:
-            return 0.00000000001
         # no more than 50 moves without capture
         if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
@@ -731,7 +729,7 @@ class MoaraNew(mcts2.IGame):
 
         # repetition
         s = str(self)
-        rep = self.history[s] if s in self.history else 0
+        rep = 0 #self.history[s] if s in self.history else 0
         result.append([rep] * self.boardSize)
         # total moves
         result.append([self.noMoves] * self.boardSize)
