@@ -724,12 +724,12 @@ class NeuralNetNew(mcts2.INeuralNet):
 
 
 def doArena(n: mcts2.INeuralNet, mcts: mcts2.MCTS, doTrain=True):
-    # otherPlayer = lambda x: HumanPlayer().play(x)
-    otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
+    otherPlayer = Player("Marcel", lambda x: HumanPlayer().play(x))
+    # otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
     neuralPlayer = Player("neural", lambda x: np.argmax(mcts.getActionProbabilities(x, 0)))
     a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
 
-    result = a.playGames(10, verbose=False)
+    result = a.playGames(10, verbose=True)
     if doTrain:
         # train the network based on the arena games
         trainExamples = []
@@ -753,6 +753,6 @@ n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-mcts2.learn(moaraGame, mcts, n, doArena)
+# mcts2.learn(moaraGame, mcts, n, doArena)
 
-# doArena(n, mcts)
+doArena(n, mcts)
