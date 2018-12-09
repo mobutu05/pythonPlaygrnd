@@ -1041,9 +1041,9 @@ def learn(game: IGame, mcts:MCTS, nnet: INeuralNet, doArena = None):
             nnet.train(trainExamples)
             nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
             # test against the randome
-            if i % 5 == 0:
-                if doArena is not None:
-                    doArena(nnet, mcts, False)
+            # if i % 5 == 0:
+            if doArena is not None:
+                doArena(nnet, mcts, False)
 
 
 # def PitAgainst(neuralDataFileNumber):
