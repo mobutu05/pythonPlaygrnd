@@ -863,7 +863,7 @@ class MCTS:
         endGameScore = game.getGameEnded()
         # game has ended, it's a terminal node
         if endGameScore != 0:
-            return -endGameScore
+            return endGameScore
         # it's not a terminal node, continue selecting/creating a sub-node
         s = str(game)
         if s not in self.Prediction:
@@ -888,7 +888,7 @@ class MCTS:
             self.NumberOfVisits[s] = 0
             self.NewNodesCounter += 1
             # print(".", end=" ")
-            return -value[0] #+ game.getExtraReward()
+            return value[0]# * game.getCrtPlayer() #+ game.getExtraReward()
 
         self.ExistingNodesCounter += 1
         a = self.getBestAction(game)
@@ -908,7 +908,7 @@ class MCTS:
             self.NumberOfActionTaken[(s, a)] = 1
         n = self.NumberOfVisits[s] + 1
         self.NumberOfVisits[s] = n
-        return -v
+        return v# * game.getCrtPlayer()
 
     def getBestAction(self, game: IGame):
         EPS = 1e-8
@@ -940,6 +940,7 @@ class MCTS:
             if (s, a) in self.Quality
             else (moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s] + EPS)) for a in valid_actions]
         # get action with the best ucb, depending on current player
+        # best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values))
         if game.getCrtPlayer() == 1:#if first player, choose max value
             best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values))
         else:#if second player, choose min value
@@ -1002,7 +1003,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
         if (s, action) in mcts.Quality:
             # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
             print(
-                f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
+                f"{episodeStep:003d}: {mcts.Quality[(s, action)]:+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
         mcts.ExistingNodesCounter = 0
         mcts.NewNodesCounter = 0
         r = game.getGameEnded()
@@ -1011,7 +1012,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
             if abs(r) < 1:
                 print(f"Game ended after {game.noMovesWithoutCapture} moves")
             game.SaveData()
-            return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
+            return [(x[0], x[2], r) for x in trainExamples]
 
 
 def learn(game: IGame, mcts:MCTS, nnet: INeuralNet, doArena = None):
