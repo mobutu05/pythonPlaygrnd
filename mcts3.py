@@ -149,24 +149,26 @@ class MoaraNew(mcts2.IGame):
     ValidMovesFromState = {}
 
     def LoadValidMoves(self):
-        folder = moara.args.checkpoint
-        filename = f"valid.moves.data"
-        filepath = os.path.join(folder, filename)
-        if os.path.exists(filepath):
-            infile = open(filepath, 'rb')
-            MoaraNew.ValidMovesFromState = pickle.load(infile)
-            infile.close()
-        else:
-            print("No model in path '{}'".format(filepath))
-            ValidMovesFromState = {}
+        # folder = moara.args.checkpoint
+        # filename = f"valid.moves.data"
+        # filepath = os.path.join(folder, filename)
+        # if os.path.exists(filepath):
+        #     infile = open(filepath, 'rb')
+        #     MoaraNew.ValidMovesFromState = pickle.load(infile)
+        #     infile.close()
+        # else:
+        #     print("No model in path '{}'".format(filepath))
+        #     ValidMovesFromState = {}
+        pass
 
     def SaveValidMoves(self):
-        folder = moara.args.checkpoint
-        filename = f"valid.moves.data"
-        filepath = os.path.join(folder, filename)
-        outfile = open(filepath, 'wb')
-        pickle.dump(MoaraNew.ValidMovesFromState, outfile)
-        outfile.close()
+        # folder = moara.args.checkpoint
+        # filename = f"valid.moves.data"
+        # filepath = os.path.join(folder, filename)
+        # outfile = open(filepath, 'wb')
+        # pickle.dump(MoaraNew.ValidMovesFromState, outfile)
+        # outfile.close()
+        pass
 
     def __init__(self, ):
         self.board_X = 8

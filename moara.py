@@ -1618,7 +1618,7 @@ args = dotdict({
         'tempThreshold': 15,
         'updateThreshold': 0.6,
         'maxlenOfQueue': 200000,
-        'numMCTSSimulations': 25,
+        'numMCTSSimulations': 30,
         'arenaCompare': 9,
         'cpuct': 1,
         'checkpoint': './temp/',
@@ -1628,7 +1628,7 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': 181206,
+        'filename': "181210Canonical",
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
