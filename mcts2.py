@@ -910,33 +910,35 @@ class MCTS:
         EPS = 1e-8
         cur_best = -float('inf')
         best_act = -1
-        # u_values = [
-        #     (self.Qsa[(s, a)] + self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)]))
-        #     if (s, a) in self.Qsa
-        #     else (self.args.cpuct * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)) for a in valid_actions]
-        # # get action with the best ucb
-        # best_pair = functools.reduce(lambda acc, pair: pair
-        # if pair[1] > acc[1] else acc, zip(valid_actions, u_values), (best_act, cur_best))
-        # a = best_pair[0]
-
-        # UCT calculation
+        valid_actions = game.getValidMoves(game.getCrtPlayer())
         s = str(game)
-        for a in game.getValidMoves(1):
-            if (s, a) in self.Quality:
-                q = self.Quality[(s, a)]
-                p = self.Prediction[s][a]
-                n = self.NumberOfVisits[s]
-                na = self.NumberOfActionTaken[(s, a)]
-                u = q + moara.args.cpuct * p * math.sqrt(n) / (1 + na)
-            else:
-                p_ = self.Prediction[s][a]
-                n_ = self.NumberOfVisits[s]
-                u = moara.args.cpuct * p_ * math.sqrt(n_ + EPS)  # Q = 0 ?
+        u_values = [
+            (self.Quality[(s, a)] + moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s]) / (1 + self.NumberOfActionTaken[(s, a)]))
+            if (s, a) in self.Quality
+            else (moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s] + EPS)) for a in valid_actions]
+        # get action with the best ucb
+        best_pair = functools.reduce(lambda acc, pair: pair
+        if pair[1] > acc[1] else acc, zip(valid_actions, u_values), (best_act, cur_best))
+        a = best_pair[0]
 
-            if u > cur_best:
-                cur_best = u
-                best_act = a
-        a = best_act
+        # # UCT calculation
+        # s = str(game)
+        # for a in game.getValidMoves(1):
+        #     if (s, a) in self.Quality:
+        #         q = self.Quality[(s, a)]
+        #         p = self.Prediction[s][a]
+        #         n = self.NumberOfVisits[s]
+        #         na = self.NumberOfActionTaken[(s, a)]
+        #         u = q + moara.args.cpuct * p * math.sqrt(n) / (1 + na)
+        #     else:
+        #         p_ = self.Prediction[s][a]
+        #         n_ = self.NumberOfVisits[s]
+        #         u = moara.args.cpuct * p_ * math.sqrt(n_ + EPS)  # Q = 0 ?
+        #
+        #     if u > cur_best:
+        #         cur_best = u
+        #         best_act = a
+        # a = best_act
         return a
 
     def getActionProbabilities(self, game: IGame, temperature: float = 1, simulate: bool = True):
