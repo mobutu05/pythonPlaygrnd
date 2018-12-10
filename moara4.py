@@ -362,7 +362,7 @@ class MoaraNew(mcts2.IGame):
     def getExtraReward(self):
         # return 0
         if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return -1*self.playerAtMove
+            return 1
         else:
             return 0.0
 
