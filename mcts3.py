@@ -705,7 +705,7 @@ class MoaraNew(mcts2.IGame):
                     result.append([0] * self.boardSize)
             else:
                 l = list(self.moves[len(self.moves) - 1 - i])
-                board = [1 if l[x] == 'x' else -1 if l[x] == '0' else 0 for x in range(self.boardSize)]
+                board = [1 if l[x] == 'x' else -1 if l[x] == 'o' else 0 for x in range(self.boardSize)]
                 unusedPlayer1 = int(l[self.boardSize])
                 unusedPlayer2 = int(l[self.boardSize + 1])
                 crtPlayer = 1 if l[self.boardSize + 2] == 'x' else -1
