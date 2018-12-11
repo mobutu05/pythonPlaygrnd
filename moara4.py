@@ -87,7 +87,7 @@ class Arena:
                                        trainExamples]
         return r
 
-    def playGames(self, num, verbose=False):
+    def     playGames(self, num, verbose=False):
         """
         Plays num games in which player1 starts num/2 games and player2 starts
         num/2 games.
@@ -108,9 +108,9 @@ class Arena:
         for i in range(num):
             self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
-            if gameResult == 1:
+            if gameResult == 0.5:
                 self.player1.score += 1
-            elif gameResult == -1:
+            elif gameResult == -0.5:
                 self.player2.score += 1
             else:
                 draws += 1
@@ -348,13 +348,13 @@ class MoaraNew(mcts2.IGame):
         if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(self.playerAtMove) < 3:
-            return -1 * self.playerAtMove
+            return -0.5 * self.playerAtMove
         if self.getPlayerCount(-self.playerAtMove) < 3:
-            return 1 * self.playerAtMove
+            return 0.5 * self.playerAtMove
         player_valid_moves_list = self.getValidMoves(self.playerAtMove)
         if player_valid_moves_list == []:
             self.display()
-            return -1 * self.playerAtMove
+            return -0.5 * self.playerAtMove
         return 0
 
         # list of legal moves from the current position for the player
@@ -363,7 +363,7 @@ class MoaraNew(mcts2.IGame):
     def getExtraReward(self):
         # return 0
         if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 1
+            return 0.5
         else:
             return 0.0
 
@@ -648,7 +648,7 @@ class NeuralNetNew(mcts2.INeuralNet):
         h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
         h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
         h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='valid')(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv4)
         s_fc1 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
         s_fc2 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
