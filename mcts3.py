@@ -331,13 +331,13 @@ class MoaraNew(mcts2.IGame):
         if self.noMovesWithoutCapture > 50:
             return 0.00000000001  # draw
         if self.getPlayerCount(self.playerAtMove) < 3:
-            return -1 * self.playerAtMove
+            return -0.5 * self.playerAtMove
         if self.getPlayerCount(-self.playerAtMove) < 3:
-            return 1 * self.playerAtMove
+            return 0.5 * self.playerAtMove
         player_valid_moves_list = self.getValidMoves(self.playerAtMove)
         if player_valid_moves_list == []:
             self.display()
-            return -1 * self.playerAtMove
+            return -0.5 * self.playerAtMove
         return 0
 
         # list of legal moves from the current position for the player
@@ -346,7 +346,7 @@ class MoaraNew(mcts2.IGame):
     def getExtraReward(self):
         # return 0
         if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return -1*self.playerAtMove
+            return -0.5*self.playerAtMove
         else:
             return 0.0
 
