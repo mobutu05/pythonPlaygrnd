@@ -455,6 +455,10 @@ class Moara(IGame):
     def copy(self):
         return copy.deepcopy(self)
 
+    # add reward for capture
+    def getExtraReward(self):
+        return 0
+
     # string representation of the current position in the game
     def __repr__(self):
         hh = ''
@@ -908,22 +912,11 @@ class MCTS:
 
     def getBestAction(self, game: IGame):
         EPS = 1e-8
-        cur_best = -float('inf')
-        best_act = -1
-        valid_actions = game.getValidMoves(game.getCrtPlayer())
         s = str(game)
-        u_values = [
-            (self.Quality[(s, a)] + moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s]) / (1 + self.NumberOfActionTaken[(s, a)]))
-            if (s, a) in self.Quality
-            else (moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s] + EPS)) for a in valid_actions]
-        # get action with the best ucb
-        best_pair = functools.reduce(lambda acc, pair: pair
-        if pair[1] > acc[1] else acc, zip(valid_actions, u_values), (best_act, cur_best))
-        a = best_pair[0]
-
+        # cur_best = -float('inf')
+        # best_act = -1
         # # UCT calculation
-        # s = str(game)
-        # for a in game.getValidMoves(1):
+        # for a in game.getValidMoves(game.getCrtPlayer()):
         #     if (s, a) in self.Quality:
         #         q = self.Quality[(s, a)]
         #         p = self.Prediction[s][a]
@@ -939,6 +932,21 @@ class MCTS:
         #         cur_best = u
         #         best_act = a
         # a = best_act
+
+        #compute list of u values, functionally
+        valid_actions = game.getValidMoves(game.getCrtPlayer())
+        u_values = [
+            (self.Quality[(s, a)] + moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s]) / (1 + self.NumberOfActionTaken[(s, a)]))
+            if (s, a) in self.Quality
+            else (moara.args.cpuct * self.Prediction[s][a] * math.sqrt(self.NumberOfVisits[s] + EPS)) for a in valid_actions]
+        # get action with the best ucb, depending on current player
+        # best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values))
+        if game.getCrtPlayer() == 1:#if first player, choose max value
+            best_pair = functools.reduce(lambda acc, pair: pair if pair[1] > acc[1] else acc, zip(valid_actions, u_values))
+        else:#if second player, choose min value
+            best_pair = functools.reduce(lambda acc, pair: pair if pair[1] < acc[1] else acc, zip(valid_actions, u_values))
+
+        a = best_pair[0]
         return a
 
     def getActionProbabilities(self, game: IGame, temperature: float = 1, simulate: bool = True):
@@ -1001,11 +1009,13 @@ def executeEpisode(game: IGame, mcts: MCTS):
         r = game.getGameEnded()
 
         if r != 0:
+            if abs(r) < 1:
+                print(f"Game ended after {game.noMovesWithoutCapture} moves")
             game.SaveData()
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 
 
-def learn(game: IGame, mcts:MCTS, nnet: INeuralNet):
+def learn(game: IGame, mcts:MCTS, nnet: INeuralNet, doArena = None):
     for i in range(0, moara.args.numIterations + 1):
         iterationTrainExamples = deque([], maxlen=moara.args.maxlenOfQueue)
         print('------ITER ' + str(i) + '------')
@@ -1029,12 +1039,12 @@ def learn(game: IGame, mcts:MCTS, nnet: INeuralNet):
         shuffle(trainExamples)
         if trainExamples != []:
             nnet.train(trainExamples)
-
-            # test against the previous
-            # if i % 5 == 0:
-            #     # self.PitAgainst('no36.neural.data-ITER-390')
-            #     PitAgainst(moara.filename - 1)
             nnet.save_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+            # test against the randome
+            # if i % 5 == 0:
+            if doArena is not None:
+                doArena(nnet, mcts, False)
+
 
 # def PitAgainst(neuralDataFileNumber):
 #
@@ -1055,4 +1065,11 @@ if __name__ == "__main__":
     print("mcts 2")
     moaraGame: Moara = Moara()
     n = NeuralNet(moaraGame.getActionSize(), 0, moara.args)
-    learn(moaraGame)
+    n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+
+
+
+
+    mcts = MCTS(n)
+    learn(moaraGame, mcts, n, None)
+
