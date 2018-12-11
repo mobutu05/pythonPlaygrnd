@@ -723,9 +723,12 @@ class NeuralNetNew(mcts2.INeuralNet):
             print("No model in path '{}'".format(filepath))
 
 
+mcts_2 = None
+
 def doArena(n: mcts2.INeuralNet, mcts: mcts2.MCTS, doTrain=True):
     # otherPlayer = Player("Marcel", lambda x: HumanPlayer().play(x))
-    otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
+    # otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
+    otherPlayer = Player("neural OLD", lambda x: np.argmax(mcts2.getActionProbabilities(x, 0)))
     neuralPlayer = Player("neural", lambda x: np.argmax(mcts.getActionProbabilities(x, 0)))
     a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
 
@@ -751,8 +754,11 @@ moaraGame: MoaraNew = MoaraNew()
 # moaraGame.LoadValidMoves()
 n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+n2 = NeuralNetNew(moaraGame, mcts2.moara.args)
+n2.load_checkpoint(folder=moara.args.checkpoint, filename_no='no181210NoHistExtra')
 
 mcts = mcts2.MCTS(n)
+mcts_2 = mcts2.MCTS(n2)
 mcts2.learn(moaraGame, mcts, n, doArena)
 
 # doArena(n, mcts)
