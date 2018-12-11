@@ -1043,7 +1043,7 @@ def learn(game: IGame, mcts:MCTS, nnet: INeuralNet, doArena = None):
             # test against the randome
             # if i % 5 == 0:
             if doArena is not None:
-                doArena(nnet, mcts, False)
+                doArena(nnet, False)
 
 
 # def PitAgainst(neuralDataFileNumber):

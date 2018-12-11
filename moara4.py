@@ -361,11 +361,11 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        return 0
-        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-        #     return 1
-        # else:
-        #     return 0.0
+        # return 0
+        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+            return 1
+        else:
+            return 0.0
 
     def getValidMoves(self, player):
         orig = -1
@@ -738,8 +738,9 @@ class NeuralNetNew(mcts2.INeuralNet):
             print("No model in path '{}'".format(filepath))
 
 
-def doArena(n: mcts2.INeuralNet, mcts: mcts2.MCTS, doTrain=True):
+def doArena(n: mcts2.INeuralNet, doTrain=True):
     # otherPlayer = Player("Marcel", lambda x: HumanPlayer().play(x))
+    mcts = mcts2.MCTS(n)
     otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
     neuralPlayer = Player("neural", lambda x: np.argmax(mcts.getActionProbabilities(x, 0)))
     a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
