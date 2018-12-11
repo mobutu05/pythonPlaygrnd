@@ -66,9 +66,10 @@ class Arena:
         NRs = {}
         while r == 0:
             it += 1
-            action = players[self.game.getCrtPlayer() + 1].method(self.game)
-            p = [1 if x == action else 0 for x in range(self.game.getActionSize())]
-            trainExamples.append([self.game.getInternalRepresentation(), self.game.getCrtPlayer(), p])
+            canonicalBoard = self.game.getCanonicalForm()
+            action = players[self.game.getCrtPlayer() + 1].method(canonicalBoard)
+            p = [1 if x == action else 0 for x in range(canonicalBoard.getActionSize())]
+            trainExamples.append([canonicalBoard.getInternalRepresentation(), self.game.getCrtPlayer(), p])
             self.game = self.game.getNextState(action)
             r = self.game.getGameEnded()
             if it > 1000:
@@ -76,14 +77,13 @@ class Arena:
 
             if verbose:
                 self.game.display()
-                print(f"Turn {it:03d} {str(self.game)} Player { players[-self.game.getCrtPlayer() + 1].name}")
             else:
-                print('.', end="")
+                print(f"Turn {it:03d} {str(self.game)} Player { players[-self.game.getCrtPlayer() + 1].name} {self.game.getPlayerCount(1)}-{self.game.getPlayerCount(-1)}")
 
         if verbose:
             self.game.display()
             print(f"Game over: Turn {it}. Result {self.player1.name}-{self.player2.name} is {r}")
-        self.iterationTrainExamples = [(x[0], x[2], r) for x in
+        self.iterationTrainExamples = [(x[0], x[2], r * ((-1) ** (x[1] != self.game.getCrtPlayer))) for x in
                                        trainExamples]
         return r
 
@@ -126,6 +126,7 @@ class Arena:
             self.player1, self.player2 = self.player2, self.player1
 
             if self.player1.score > num / 2 or self.player2.score > num / 2:
+                print(f"FINAL {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} Draws: {draws}")
                 break
         # for i in range(num):
         #     gameResult = self.playGame(verbose=verbose)
@@ -245,12 +246,10 @@ class MoaraNew(mcts2.IGame):
         # number of total moves
         self.noMoves = 0
         self.canonized = False  # true if canonical has revert the sign of the player
-        self.time_len = 0  # keep current state and previous 7
+        self.time_len = 8  # keep current state and previous 7
         self.feature_len = 0  # number of planes describing current board
         self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
                                   self.boardSize * self.boardSize)  # move/jump pieces
-        s = str(self)
-        self.moves.append(s)
 
     def SaveData(self):
         pass
@@ -288,7 +287,9 @@ class MoaraNew(mcts2.IGame):
             temp.playerAtMove = 1
             temp.moves = []
             # also revert for history as well
-            for move in self.moves:
+            for index, move in enumerate(self.moves):
+                if index < len(self.moves) - self.time_len:
+                    continue
                 l = list(move)
                 l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
                 l[self.boardSize], l[self.boardSize+1] = l[self.boardSize+1], l[self.boardSize]
@@ -360,11 +361,11 @@ class MoaraNew(mcts2.IGame):
 
     # add reward for capture
     def getExtraReward(self):
-        # return 0
-        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 1
-        else:
-            return 0.0
+        return 0
+        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+        #     return 1
+        # else:
+        #     return 0.0
 
     def getValidMoves(self, player):
         orig = -1
@@ -499,9 +500,11 @@ class MoaraNew(mcts2.IGame):
             piece_to_move = action % self.possibleMovesSize
             orig = piece_to_move // self.boardSize - 1
             if newGameState.internalArray[orig] != self.playerAtMove:
+                newGameState.display()
                 assert (newGameState.internalArray[orig] == self.playerAtMove)
             dest = piece_to_move % self.boardSize
             if newGameState.internalArray[dest] != 0:
+                newGameState.display()
                 assert (newGameState.internalArray[dest] == 0)
             newGameState.internalArray[dest] = self.playerAtMove
             newGameState.internalArray[orig] = 0
@@ -578,7 +581,6 @@ class MoaraNew(mcts2.IGame):
         print("--")
 
     def getInternalRepresentation(self):
-        self.time_len = 8  # keep current state and previous 7
         self.feature_len =  (1 +  # board for player 1
                        1 +  # board for player 2
                        1 +  # rotated board for player 1
@@ -588,7 +590,7 @@ class MoaraNew(mcts2.IGame):
         result = []
         planes = (self.time_len *  self.feature_len +
                   # 1 +  # no of repetitions for current board, uniform value over array
-                  1 +  #color
+                  # 1 +  #color
                   1)  # total moves, uniform value over array
 
         # propagate back in temporal array
@@ -628,7 +630,7 @@ class MoaraNew(mcts2.IGame):
         # result.append([self.noMoves] * self.boardSize)
         # total moves without capture
         result.append([self.noMovesWithoutCapture] * self.boardSize)
-        result.append([self.playerAtMove] * self.boardSize)
+        # result.append([self.playerAtMove] * self.boardSize)
         res2 = np.array(result).reshape(planes, self.board_X, self.board_Y)
         return res2
 
@@ -766,6 +768,6 @@ n = NeuralNetNew(moaraGame, mcts2.moara.args)
 n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 
 mcts = mcts2.MCTS(n)
-mcts2.learn(moaraGame, mcts, n)
+mcts2.learn(moaraGame, mcts, n, doArena)
 
 # doArena(n, mcts)

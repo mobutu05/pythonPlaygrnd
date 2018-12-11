@@ -995,7 +995,7 @@ def executeEpisode(game: IGame, mcts: MCTS):
 
         action = np.random.choice(len(probabilities), p=probabilities)
         # for p in sym:
-        trainExamples.append([canonical.getInternalRepresentation(), canonical.getCrtPlayer(), probabilities])
+        trainExamples.append([canonical.getInternalRepresentation(), game.getCrtPlayer(), probabilities])
 
         game:IGame = game.getNextState(action)
         # game.display()
