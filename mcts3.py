@@ -729,6 +729,7 @@ def doArena(n: mcts2.INeuralNet, mcts: mcts2.MCTS, doTrain=True):
     # otherPlayer = Player("Marcel", lambda x: HumanPlayer().play(x))
     otherPlayer = Player("random", lambda x: RandomPlayer().play(x))
     # otherPlayer = Player("neural OLD", lambda x: np.argmax(mcts2.getActionProbabilities(x, 0)))
+    mcts = mcts2.MCTS(n)
     neuralPlayer = Player("neural", lambda x: np.argmax(mcts.getActionProbabilities(x, 0)))
     a = Arena(neuralPlayer, otherPlayer, moaraGame, moara.args, mcts)
 
