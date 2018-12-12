@@ -1647,7 +1647,7 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': '181211Extra',
+        'filename': '181212Extra',
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),

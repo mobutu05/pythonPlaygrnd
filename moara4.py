@@ -260,8 +260,8 @@ class MoaraNew(mcts2.IGame):
     # string representation of the current position in the game
     def __repr__(self):
         board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
-        # player = 'x' if self.playerAtMove == 1 else 'o'
-        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}"
+        player = 'x' if self.playerAtMove == 1 else 'o'
+        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}"
 
     def getActionSize(self):
         """
@@ -435,14 +435,14 @@ class MoaraNew(mcts2.IGame):
 
             for mill in mills:
                 copy_of_internal_array = np.array(self.internalArray)
-                copy_of_internal_array[dest] = self.playerAtMove
+                copy_of_internal_array[dest] = player
                 if orig != -1:
                     copy_of_internal_array[orig] = 0
                 sum_mill = copy_of_internal_array[mill[0]] + \
                            copy_of_internal_array[mill[1]] + \
                            copy_of_internal_array[mill[2]]
 
-                if sum_mill == 3 * self.playerAtMove:
+                if sum_mill == 3 * player:
                     wouldBeInMill = True
                     break
 
@@ -450,15 +450,15 @@ class MoaraNew(mcts2.IGame):
                 debug = 0
                 if debug:
                     tmp = self.copy()
-                    tmp.internalArray[dest] = self.playerAtMove
+                    tmp.internalArray[dest] = player
                     tmp.display()
                 # find all opponents available to capture
                 all_opponent_pieces = \
                     [x for x in range(self.boardSize) if
-                     self.internalArray[x] == -self.playerAtMove]
+                     self.internalArray[x] == -player]
                 # that is not an enemy mill
                 available_opponent_pieces = list(
-                    filter(lambda p: self.isInAMill(p, -self.playerAtMove) is False,
+                    filter(lambda p: self.isInAMill(p, -player) is False,
                            all_opponent_pieces))
                 if len(available_opponent_pieces) == 0:
                     # if no available enemy piece to capture outside of aa mill
@@ -479,7 +479,6 @@ class MoaraNew(mcts2.IGame):
     def getNextState(self, action):
         # state will be modified in the copied object
         newGameState = self.copy()
-        newGameState.playerAtMove = -self.playerAtMove
         # newGameState.canonized = False
         if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
             piece_to_put = action % self.possibleMovesSize
@@ -499,10 +498,16 @@ class MoaraNew(mcts2.IGame):
         else:
             piece_to_move = action % self.possibleMovesSize
             orig = piece_to_move // self.boardSize - 1
+            dest = piece_to_move % self.boardSize
             if newGameState.internalArray[orig] != self.playerAtMove:
+                print(self)
+                moves = self.getValidMoves(self.playerAtMove)
+                print(moves)
+                print(f"action {action} player {self.playerAtMove}")
+                print(f"orig {orig}   dest {dest}")
                 newGameState.display()
                 assert (newGameState.internalArray[orig] == self.playerAtMove)
-            dest = piece_to_move % self.boardSize
+
             if newGameState.internalArray[dest] != 0:
                 newGameState.display()
                 assert (newGameState.internalArray[dest] == 0)
@@ -518,7 +523,7 @@ class MoaraNew(mcts2.IGame):
                 assert (newGameState.internalArray[opponent_piece] == -self.playerAtMove)
                 newGameState.internalArray[opponent_piece] = 0
                 newGameState.noMovesWithoutCapture = 0  # reset it
-
+        newGameState.playerAtMove = -self.playerAtMove
         newGameState.updateHistory()
         # newGameState.display()
         return newGameState
@@ -590,7 +595,7 @@ class MoaraNew(mcts2.IGame):
         result = []
         planes = (self.time_len *  self.feature_len +
                   # 1 +  # no of repetitions for current board, uniform value over array
-                  # 1 +  #color
+                  1 +  #color
                   1)  # total moves, uniform value over array
 
         # propagate back in temporal array
@@ -630,9 +635,9 @@ class MoaraNew(mcts2.IGame):
         # result.append([self.noMoves] * self.boardSize)
         # total moves without capture
         result.append([self.noMovesWithoutCapture] * self.boardSize)
-        # result.append([self.playerAtMove] * self.boardSize)
-        res2 = np.array(result).reshape(planes, self.board_X, self.board_Y)
-        return res2
+        result.append([self.playerAtMove] * self.boardSize)
+
+        return result
 
 class NeuralNetNew(mcts2.INeuralNet):
     def __init__(self, game: MoaraNew, args):
@@ -669,6 +674,8 @@ class NeuralNetNew(mcts2.INeuralNet):
                 game.getActionSize
             v: a float in [-1,1] that gives the value of the current board
         """
+        inputData = np.array(inputData).reshape(self.planes, self.board_x, self.board_y)
+
         inputData = inputData[np.newaxis, :, :]
         pi, v = self.model.predict(inputData)
         return pi[0], v[0]
@@ -686,6 +693,8 @@ class NeuralNetNew(mcts2.INeuralNet):
         """
 
         input_boards, target_pis, target_vs = list(zip(*examples))
+        input_boards = np.array(input_boards).reshape(len(input_boards), self.planes, self.board_x, self.board_y)
+
         print("mumu")
         print(len(examples))
         input_boards = np.asarray(input_boards)

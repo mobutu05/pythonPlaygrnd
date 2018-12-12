@@ -300,7 +300,6 @@ class NeuralNet(INeuralNet):
                 game.getActionSize
             v: a float in [-1,1] that gives the value of the current board
         """
-
         pi, v = self.model.predict(input)
         return pi[0], v[0]
 
