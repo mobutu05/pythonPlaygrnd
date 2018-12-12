@@ -236,7 +236,9 @@ class MoaraNew(mcts2.IGame):
         self.board_X = 8
         self.board_Y = 3
         self.boardSize = self.board_X * self.board_Y
-        # 100 if capture is to be made
+        # 1 if capture is to be made by current player
+        # -1 if capture is to be made by opponent
+        # 0 no capture
         self.boardStatus = 0
         self.unusedPieces = [9, 9]  # for opponent, player
         self.playerAtMove = 1
@@ -266,7 +268,8 @@ class MoaraNew(mcts2.IGame):
     def __repr__(self):
         board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
         player = 'x' if self.playerAtMove == 1 else 'o'
-        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}{self.boardStatus}"
+        status = 'x' if self.boardStatus == 1 else 'o' if self.boardStatus == -1 else '_'
+        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}{status}"
 
     def getActionSize(self):
         """
@@ -385,7 +388,7 @@ class MoaraNew(mcts2.IGame):
         result = []
         moves = []
         capture = []
-        if self.boardStatus != 0 and np.sign(self.boardStatus) != np.sign(player):
+        if self.boardStatus == -player:
             result = [self.getActionSize() - 1]  # pass
             MoaraNew.ValidMovesFromState[s] = result
             # self.SaveValidMoves()
@@ -421,9 +424,7 @@ class MoaraNew(mcts2.IGame):
                 # invariantBoard.display()
                 available_opponent_pieces = all_opponent_pieces
             # for each available opponent piece to be captured
-            for x in available_opponent_pieces:
-                result.append(x)
-
+            result = available_opponent_pieces
 
         MoaraNew.ValidMovesFromState[s] = result
         # self.SaveValidMoves()
@@ -434,7 +435,7 @@ class MoaraNew(mcts2.IGame):
         newGameState = self.copy()
         newGameState.playerAtMove = -self.playerAtMove
         #pass
-        if action == self.getActionSize():
+        if action == self.getActionSize()-1:
             return newGameState
         # capture
         if self.boardStatus != 0:
@@ -470,8 +471,8 @@ class MoaraNew(mcts2.IGame):
                 newGameState.internalArray[orig] = 0
             if self.boardStatus == 0:
                 if newGameState.isInAMill(dest, self.playerAtMove):
-                    newGameState.display()
-                    newGameState.boardStatus = 1  # flag that a capture can be made
+                    # newGameState.display()
+                    newGameState.boardStatus = self.playerAtMove # flag that a capture can be made
 
 
         newGameState.updateHistory()
@@ -559,8 +560,7 @@ class MoaraNew(mcts2.IGame):
             else:
                 l = list(self.moves[len(self.moves) - 1 - i])
                 board = [1 if l[x] == 'x' else -1 if l[x] == 'o' else 0 for x in range(self.boardSize)]
-                unusedPlayer1 = int(l[self.boardSize])
-                unusedPlayer2 = int(l[self.boardSize + 1])
+
 
                 # normal board for player 1
                 result.append([1 if x == 1 else 0 for x in board])
@@ -574,14 +574,19 @@ class MoaraNew(mcts2.IGame):
                 # rotated board for player 2
                 result.append([1 if x == -1 else 0 for x in rot])
 
+                unusedPlayer1 = int(l[self.boardSize])
+                unusedPlayer2 = int(l[self.boardSize + 1])
                 # unused pieces for player 1
                 result.append([unusedPlayer1] * self.boardSize)
                 # unused pieces for player 2
                 result.append([unusedPlayer2] * self.boardSize)
+
+                player = 1 if l[self.boardSize+2] == 'x' else -1
+                status = 1 if l[self.boardSize+3] == 'x' else -1 if l[self.boardSize+3] == 'o' else 0
                 #player at move
-                result.append([self.playerAtMove] * self.boardSize)
+                result.append([player] * self.boardSize)
                 #board status
-                result.append([self.boardStatus] * self.boardSize)
+                result.append([status] * self.boardSize)
 
         # # repetition
         # s = str(self)

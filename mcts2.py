@@ -891,10 +891,10 @@ class MCTS:
 
         self.ExistingNodesCounter += 1
         a = self.getBestAction(game)
-        newgame = game.getNextState(a).getCanonicalForm()
+        newg = game.getNextState(a).getCanonicalForm()
         # add a reward for capture
-        v = newgame.getExtraReward()
-        v += self.iterateNode(newgame)
+        v = newg.getExtraReward()
+        v += self.iterateNode(newg)
         if (s, a) in self.Quality:
             q = self.Quality[(s, a)]
             na = self.NumberOfActionTaken[(s, a)]
