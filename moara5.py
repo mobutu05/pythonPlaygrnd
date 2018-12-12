@@ -15,6 +15,7 @@ import moara
 import matplotlib.pyplot as plt
 from mcts2 import IGame
 
+
 class Player:
     def __init__(self, name, method):
         self.name = name
@@ -23,6 +24,7 @@ class Player:
 
     def __repr__(self):
         return self.name
+
 
 class Arena:
     """
@@ -41,8 +43,8 @@ class Arena:
         see othello/OthelloPlayers.py for an example. See pit.py for pitting
         human players/other baselines with each other.
         """
-        self.player1:Player = player1
-        self.player2:Player = player2
+        self.player1: Player = player1
+        self.player2: Player = player2
 
         self.game: IGame = game
         self.display = display
@@ -121,12 +123,12 @@ class Arena:
                 # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                 #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
-            print(f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
+            print(
+                f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
 
             self.player1, self.player2 = self.player2, self.player1
 
             if self.player1.score > num / 2 or self.player2.score > num / 2:
-
                 break
         # for i in range(num):
         #     gameResult = self.playGame(verbose=verbose)
@@ -145,8 +147,10 @@ class Arena:
         #         # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
         #         #       " => remove the oldest trainExamples")
         #         self.trainExamplesHistory.pop(0)
-        print(f"FINAL {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} Draws: {draws}")
+        print(
+            f"FINAL {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} Draws: {draws}")
         return draws
+
 
 class RandomPlayer():
     def __init__(self):
@@ -220,8 +224,6 @@ class HumanPlayer():
         return move
 
 
-
-
 class MoaraNew(mcts2.IGame):
     # transition from one position to another
     VALID_MOVES = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.VALID_MOVES]
@@ -234,6 +236,8 @@ class MoaraNew(mcts2.IGame):
         self.board_X = 8
         self.board_Y = 3
         self.boardSize = self.board_X * self.board_Y
+        # 100 if capture is to be made
+        self.boardStatus = 0
         self.unusedPieces = [9, 9]  # for opponent, player
         self.playerAtMove = 1
         self.internalArray = np.array([0] * self.boardSize)
@@ -249,8 +253,9 @@ class MoaraNew(mcts2.IGame):
         self.time_len = 4  # keep current state and previous 7
         self.feature_len = 0  # number of planes describing current board
         self.possibleMovesSize = (self.boardSize +  # put pieces (while unused pieces exist)
-                                  self.boardSize * self.boardSize)  # move/jump pieces
-
+                                  self.boardSize * self.boardSize +  # move/jump pieces
+                                  1)  # pass
+        self.moves.append(str(self))
     def SaveData(self):
         pass
 
@@ -261,15 +266,14 @@ class MoaraNew(mcts2.IGame):
     def __repr__(self):
         board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
         player = 'x' if self.playerAtMove == 1 else 'o'
-        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}"
+        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}{self.boardStatus}"
 
     def getActionSize(self):
         """
         Returns:
             actionSize: number of all possible actions
         """
-        return (self.possibleMovesSize  # put pieces (while unused pieces exist) or move/jump pieces
-                * 10)  # capture none or any of 9 opponent pieces
+        return self.possibleMovesSize  # put pieces (while unused pieces exist) or move/jump pieces
 
     def copy(self):
         return copy.deepcopy(self)
@@ -282,6 +286,7 @@ class MoaraNew(mcts2.IGame):
             temp = self.copy()
             temp.canonized = not self.canonized
             temp.internalArray = self.internalArray * self.playerAtMove
+            temp.boardStatus = self.boardStatus * self.playerAtMove
             # inverse
             temp.unusedPieces = [self.unusedPieces[1], self.unusedPieces[0]]
             temp.playerAtMove = 1
@@ -292,7 +297,7 @@ class MoaraNew(mcts2.IGame):
                     continue
                 l = list(move)
                 l = ['x' if x == 'o' else 'o' if x == 'x' else x for x in l]
-                l[self.boardSize], l[self.boardSize+1] = l[self.boardSize+1], l[self.boardSize]
+                l[self.boardSize], l[self.boardSize + 1] = l[self.boardSize + 1], l[self.boardSize]
                 temp.moves.append(''.join(l))
             return temp
 
@@ -372,158 +377,103 @@ class MoaraNew(mcts2.IGame):
         dest = -1
 
         # memoization
-        board_status = str(self)
-        if board_status in MoaraNew.ValidMovesFromState:
+        s = str(self)
+        if s in MoaraNew.ValidMovesFromState:
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
-            return MoaraNew.ValidMovesFromState[board_status]
+            return MoaraNew.ValidMovesFromState[s]
             # else:
-
-            # need to simulate
-            # if the position has already been repeated than make sure that no subsequent move
-            # simulate each move, so that it wouldn't get into a invalid condition
-            # 3 state repetition or 50 moves without capture
-            # possibleMoves = []
-            # for move in MoaraNew.ValidMovesFromState[board_status]:
-            #     # if (s, move) not in self.memo:
-            #     if (board_status, move) not in MoaraNew.ValidMovesFromState:
-            #         newState = self.getNextState(move)
-            #         s = str(newState)
-            #         MoaraNew.ValidMovesFromState[(board_status, move)] = s
-            #     else:
-            #         s = MoaraNew.ValidMovesFromState[(board_status, move)]
-            #     if (s not in self.history or self.history[s] < 3) and self.noMovesWithoutCapture < 50:
-            #         possibleMoves.append(move)
-            #
-            # return possibleMoves
-
         result = []
         moves = []
         capture = []
+        if self.boardStatus != 0 and np.sign(self.boardStatus) != np.sign(player):
+            result = [self.getActionSize() - 1]  # pass
+            MoaraNew.ValidMovesFromState[s] = result
+            # self.SaveValidMoves()
+            return result
 
-        if self.getUnusedPlayerCount(player) > 0:  # put
-            # phase 1: can put anywhere where there is an empty place
-            moves = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+        if self.boardStatus == 0:
+            if self.getUnusedPlayerCount(player) > 0:  # put
+                # phase 1: can put anywhere where there is an empty place
+                result = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+            else:
+                if self.getPlayerCount(player) > 3:  # move
+                    valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player and
+                                                        self.internalArray[x[1]] == 0,
+                                              self.VALID_MOVES))
+                    for v_m in valid_moves:
+                        # transform into index in action moves
+                        moves.append(self.boardSize + v_m[0] * self.boardSize + v_m[1])
+                else:  # jump
+                    remaining = [x for x in range(self.boardSize) if self.internalArray[x] == player]
+                    free = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+                    for r in remaining:
+                        for f in free:
+                            moves.append(self.boardSize + r * self.boardSize + f)
+                result = moves
         else:
-            if self.getPlayerCount(player) > 3:  # move
-                valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player and
-                                                    self.internalArray[x[1]] == 0,
-                                          self.VALID_MOVES))
-                for v_m in valid_moves:
-                    # transform into index in action moves
-                    moves.append(self.boardSize + v_m[0] * self.boardSize + v_m[1])
-            else:  # jump
-                remaining = [x for x in range(self.boardSize) if self.internalArray[x] == player]
-                free = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
-                for r in remaining:
-                    for f in free:
-                        moves.append(self.boardSize + r * self.boardSize + f)
+            # find all opponents available to capture
+            all_opponent_pieces = [x for x in range(self.boardSize) if self.internalArray[x] == -player]
+            # that is not an enemy mill
+            available_opponent_pieces = list(filter(lambda p: self.isInAMill(p, -player) is False, all_opponent_pieces))
+            if len(available_opponent_pieces) == 0:
+                # if no available enemy piece to capture outside of aa mill
+                # retry with a piece from an enemy mill
+                # invariantBoard.display()
+                available_opponent_pieces = all_opponent_pieces
+            # for each available opponent piece to be captured
+            for x in available_opponent_pieces:
+                result.append(x)
 
-        # for each possible move, determine if it forms a mill
-        # if so then can capture any of the opponent pieces, that are not in a mill
-        for move in moves:
-            # extract destination:
-            dest = move % self.boardSize
-            # there is also an origin to the move:
-            if (move % self.possibleMovesSize) > self.boardSize:
-                orig = (move % self.possibleMovesSize) // self.boardSize - 1;
-            mills = self.getMills(dest)  # any pos is in two mills
-            # wouldBeInMill: bool = (invariantBoard.getMillSum(
-            #     mills[0]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove) or \
-            #                       (invariantBoard.getMillSum(
-            #                           mills[1]) + invariantBoard.playerAtMove == 3 * invariantBoard.playerAtMove)
-            wouldBeInMill = False
 
-            for mill in mills:
-                copy_of_internal_array = np.array(self.internalArray)
-                copy_of_internal_array[dest] = player
-                if orig != -1:
-                    copy_of_internal_array[orig] = 0
-                sum_mill = copy_of_internal_array[mill[0]] + \
-                           copy_of_internal_array[mill[1]] + \
-                           copy_of_internal_array[mill[2]]
-
-                if sum_mill == 3 * player:
-                    wouldBeInMill = True
-                    break
-
-            if wouldBeInMill:
-                debug = 0
-                if debug:
-                    tmp = self.copy()
-                    tmp.internalArray[dest] = player
-                    tmp.display()
-                # find all opponents available to capture
-                all_opponent_pieces = \
-                    [x for x in range(self.boardSize) if
-                     self.internalArray[x] == -player]
-                # that is not an enemy mill
-                available_opponent_pieces = list(
-                    filter(lambda p: self.isInAMill(p, -player) is False,
-                           all_opponent_pieces))
-                if len(available_opponent_pieces) == 0:
-                    # if no available enemy piece to capture outside of aa mill
-                    # retry with a piece from an enemy mill
-                    # invariantBoard.display()
-                    available_opponent_pieces = all_opponent_pieces
-                # for each available opponent piece to be captured
-                for x in available_opponent_pieces:
-                    index = all_opponent_pieces.index(x)
-                    result.append(move + (index + 1) * self.possibleMovesSize)
-            else:  # no mill, no capture
-                result.append(move)
-
-        MoaraNew.ValidMovesFromState[board_status] = result
+        MoaraNew.ValidMovesFromState[s] = result
         # self.SaveValidMoves()
         return result
 
     def getNextState(self, action):
         # state will be modified in the copied object
         newGameState = self.copy()
-        # newGameState.canonized = False
-        if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
-            piece_to_put = action % self.possibleMovesSize
-            newGameState.internalArray[piece_to_put] = self.playerAtMove
-            newGameState.decUnusedPlayerCount(self.playerAtMove)
-            # also capture
-            if action > self.possibleMovesSize:
-                # newGameState.display()
-                opponent_piece_index = action // self.possibleMovesSize - 1
-                all_opponent_pieces = \
-                    [x for x in range(self.boardSize) if newGameState.internalArray[x] == -self.playerAtMove]
-                opponent_piece = all_opponent_pieces[opponent_piece_index]
-                assert (newGameState.internalArray[opponent_piece] == -self.playerAtMove)
-                newGameState.internalArray[opponent_piece] = 0
-                newGameState.noMovesWithoutCapture = 0  # reset it
-
-        else:
-            piece_to_move = action % self.possibleMovesSize
-            orig = piece_to_move // self.boardSize - 1
-            dest = piece_to_move % self.boardSize
-            if newGameState.internalArray[orig] != self.playerAtMove:
-                print(self)
-                moves = self.getValidMoves(self.playerAtMove)
-                print(moves)
-                print(f"action {action} player {self.playerAtMove}")
-                print(f"orig {orig}   dest {dest}")
-                newGameState.display()
-                assert (newGameState.internalArray[orig] == self.playerAtMove)
-
-            if newGameState.internalArray[dest] != 0:
-                newGameState.display()
-                assert (newGameState.internalArray[dest] == 0)
-            newGameState.internalArray[dest] = self.playerAtMove
-            newGameState.internalArray[orig] = 0
-            # also capture
-            if action > self.possibleMovesSize:
-                # newGameState.display()
-                opponent_piece_index = action // self.possibleMovesSize - 1
-                all_opponent_pieces = \
-                    [x for x in range(self.boardSize) if newGameState.internalArray[x] == -self.playerAtMove]
-                opponent_piece = all_opponent_pieces[opponent_piece_index]
-                assert (newGameState.internalArray[opponent_piece] == -self.playerAtMove)
-                newGameState.internalArray[opponent_piece] = 0
-                newGameState.noMovesWithoutCapture = 0  # reset it
         newGameState.playerAtMove = -self.playerAtMove
+        #pass
+        if action == self.getActionSize():
+            return newGameState
+        # capture
+        if self.boardStatus != 0:
+            # also capture
+            opponent_piece = action
+            assert (self.internalArray[opponent_piece] == -self.playerAtMove)
+            newGameState.internalArray[opponent_piece] = 0
+            newGameState.noMovesWithoutCapture = 0  # reset it
+            newGameState.boardStatus = 0
+        else:
+            dest = action
+            if self.getUnusedPlayerCount(self.playerAtMove) > 0:  # put
+                assert (self.internalArray[dest] == 0)
+                newGameState.internalArray[dest] = self.playerAtMove
+                newGameState.decUnusedPlayerCount(self.playerAtMove)
+            else:
+                piece_to_move = action % self.possibleMovesSize
+                orig = piece_to_move // self.boardSize - 1
+                dest = piece_to_move % self.boardSize
+                if newGameState.internalArray[orig] != self.playerAtMove:
+                    print(self)
+                    moves = self.getValidMoves(self.playerAtMove)
+                    print(moves)
+                    print(f"action {action} player {self.playerAtMove}")
+                    print(f"orig {orig}   dest {dest}")
+                    newGameState.display()
+                    assert (newGameState.internalArray[orig] == self.playerAtMove)
+
+                if newGameState.internalArray[dest] != 0:
+                    newGameState.display()
+                    assert (newGameState.internalArray[dest] == 0)
+                newGameState.internalArray[dest] = self.playerAtMove
+                newGameState.internalArray[orig] = 0
+            if self.boardStatus == 0:
+                if newGameState.isInAMill(dest, self.playerAtMove):
+                    newGameState.display()
+                    newGameState.boardStatus = 1  # flag that a capture can be made
+
+
         newGameState.updateHistory()
         # newGameState.display()
         return newGameState
@@ -586,16 +536,18 @@ class MoaraNew(mcts2.IGame):
         print("--")
 
     def getInternalRepresentation(self):
-        self.feature_len =  (1 +  # board for player 1
-                       1 +  # board for player 2
-                       1 +  # rotated board for player 1
-                       1 +  # rotated board for player 2
-                       1 +  # unused pieces for player 1
-                       1)   # unused pieces for player 2
+        self.feature_len = (1 +  # board for player 1
+                            1 +  # board for player 2
+                            1 +  # rotated board for player 1
+                            1 +  # rotated board for player 2
+                            1 +  # unused pieces for player 1
+                            1 +  # unused pieces for player 2
+                            1 +  # color
+                            1)  # board status
         result = []
-        planes = (self.time_len *  self.feature_len +
+        planes = (self.time_len * self.feature_len +
                   # 1 +  # no of repetitions for current board, uniform value over array
-                  1 +  #color
+
                   1)  # total moves, uniform value over array
 
         # propagate back in temporal array
@@ -626,6 +578,10 @@ class MoaraNew(mcts2.IGame):
                 result.append([unusedPlayer1] * self.boardSize)
                 # unused pieces for player 2
                 result.append([unusedPlayer2] * self.boardSize)
+                #player at move
+                result.append([self.playerAtMove] * self.boardSize)
+                #board status
+                result.append([self.boardStatus] * self.boardSize)
 
         # # repetition
         # s = str(self)
@@ -635,9 +591,10 @@ class MoaraNew(mcts2.IGame):
         # result.append([self.noMoves] * self.boardSize)
         # total moves without capture
         result.append([self.noMovesWithoutCapture] * self.boardSize)
-        result.append([self.playerAtMove] * self.boardSize)
+
 
         return result
+
 
 class NeuralNetNew(mcts2.INeuralNet):
     def __init__(self, game: MoaraNew, args):
@@ -649,19 +606,27 @@ class NeuralNetNew(mcts2.INeuralNet):
 
         self.input_boards = Input(shape=(self.planes, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
 
-        x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, self.planes))(self.input_boards))  # batch_size  x board_x x board_y x 1
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='valid')(h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, self.planes))(
+            self.input_boards))  # batch_size  x board_x x board_y x 1
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            x_image)))  # batch_size  x board_x x board_y x num_channels
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+            h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='valid')(
+            h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv4)
-        s_fc1 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        s_fc2 = Dropout(self.args.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
+        s_fc1 = Dropout(self.args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
+        s_fc2 = Dropout(self.args.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
-        self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'],loss_weights=[1., 5.], optimizer=Adam(self.args.lr))
+        self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], loss_weights=[1., 5.],
+                           optimizer=Adam(self.args.lr))
         print(self.model.summary())
 
     def predict(self, inputData):
