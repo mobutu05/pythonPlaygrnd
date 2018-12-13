@@ -1647,7 +1647,7 @@ args = dotdict({
         # 'filename': 'no32.neural.data',  # 1
 
         # 'filename' : 'no35.neural.data',#2-2-2-2-2
-        'filename': '181213Minimal',
+        'filename': '181213Extra',
 
         # 'filename': 'no37.neural.data',  # 1
         'load_folder_file': ('/dev/models/8x100x50', 'best.pth.tar'),
@@ -1655,7 +1655,7 @@ args = dotdict({
 
         'lr': 0.001,
         'dropout': 0.3,
-        'epochs': 10,
+        'epochs': 20,
         'batch_size': 64,
         'cuda': True,
         'num_channels': 512,
