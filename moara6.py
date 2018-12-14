@@ -358,7 +358,7 @@ class MoaraNew(mcts2.IGame):
             return 0.5 * self.playerAtMove
         player_valid_moves_list = self.getValidMoves(self.playerAtMove)
         if player_valid_moves_list == []:
-            self.display()
+            # self.display()
             return -0.5 * self.playerAtMove
         return 0
 
@@ -454,7 +454,7 @@ class MoaraNew(mcts2.IGame):
                 orig = boardStatus - 1
                 dest = action
                 if newGameState.internalArray[orig] != self.playerAtMove:
-                    self.display()
+                    # self.display()
                     assert (newGameState.internalArray[orig] == self.playerAtMove)
 
                 if newGameState.internalArray[dest] != 0:
