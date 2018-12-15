@@ -1001,15 +1001,19 @@ def executeEpisode(game: IGame, mcts: MCTS):
         s = str(canonical)
         if (s, action) in mcts.Quality:
             # print(str(episodeStep) + ": " + str(self.mcts.Qsa[(s, action)]) + " - " + str(board))
-            print(
-                f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
+            print(".", end="", flush=True)
         mcts.ExistingNodesCounter = 0
         mcts.NewNodesCounter = 0
         r = game.getGameEnded()
 
         if r != 0:
             if abs(r) < 1:
+                print("")
+                print(f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
                 print(f"Game ended after {game.noMovesWithoutCapture} moves")
+            else:
+                print("")
+                print(f"{episodeStep:003d}: {mcts.Quality[(s, action)] * (-game.playerAtMove):+4.2f} : {action:4d} : {game} {game.getPlayerCount(1)}-{game.getPlayerCount(-1)} ex:{mcts.ExistingNodesCounter} new:{mcts.NewNodesCounter}")
             game.SaveData()
             return [(x[0], x[2], r * ((-1) ** (x[1] != game.getCrtPlayer()))) for x in trainExamples]
 

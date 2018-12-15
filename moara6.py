@@ -79,8 +79,9 @@ class Arena:
 
             if verbose:
                 self.game.display()
-            else:
                 print(f"Turn {it:03d} {str(self.game)} Player { players[-self.game.getCrtPlayer() + 1].name} {self.game.getPlayerCount(1)}-{self.game.getPlayerCount(-1)}")
+            else:
+                print(".", end="",flush=True)
 
         if verbose:
             self.game.display()
@@ -110,9 +111,9 @@ class Arena:
         for i in range(num):
             self.iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
             gameResult = self.playGame(verbose=verbose)
-            if gameResult == 0.5:
+            if gameResult == 1:
                 self.player1.score += 1
-            elif gameResult == -0.5:
+            elif gameResult == -1:
                 self.player2.score += 1
             else:
                 draws += 1
@@ -123,8 +124,8 @@ class Arena:
                 # print("len(trainExamplesHistory) =", len(self.trainExamplesHistory),
                 #       " => remove the oldest trainExamples")
                 self.trainExamplesHistory.pop(0)
-            print(
-                f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
+            print("")
+            print( f"Round {i}: {gameResult}; {self.player1.name}:{self.player1.score}  {self.player2.name}:{self.player2.score} - {draws}")
 
             self.player1, self.player2 = self.player2, self.player1
 
@@ -350,27 +351,27 @@ class MoaraNew(mcts2.IGame):
         # if s in self.history and self.history[s] > 3:
         #     return 0.00000000001
         # no more than 50 moves without capture
-        if self.noMovesWithoutCapture > 50:
+        if self.noMovesWithoutCapture > 100:
             return 0.00000000001  # draw
         if self.getPlayerCount(self.playerAtMove) < 3:
-            return -0.5 * self.playerAtMove
+            return -1 * self.playerAtMove
         if self.getPlayerCount(-self.playerAtMove) < 3:
-            return 0.5 * self.playerAtMove
+            return 1 * self.playerAtMove
         player_valid_moves_list = self.getValidMoves(self.playerAtMove)
         if player_valid_moves_list == []:
             # self.display()
-            return -0.5 * self.playerAtMove
+            return -1 * self.playerAtMove
         return 0
 
         # list of legal moves from the current position for the player
 
     # add reward for capture
     def getExtraReward(self):
-        # return 0
-        if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
-            return 0.5
-        else:
-            return 0.0
+        return 0
+        # if self.noMovesWithoutCapture == 1 and self.noMoves > 1:
+        #     return 0.5
+        # else:
+        #     return 0.0
 
     def getValidMoves(self, player):
         orig = -1
