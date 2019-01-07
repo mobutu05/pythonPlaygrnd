@@ -869,8 +869,14 @@ class MCTS:
             inputToNN = game.getInternalRepresentation()
             policy_predicted, value = self.nnet.predict(inputToNN)
             validMoves = game.getValidMoves(game.getCrtPlayer())
-            moves = [1 if x in validMoves else 0 for x in range(game.getActionSize())]
-            policy = policy_predicted * moves  # masking invalid moves
+            moves = [1.0 if x in validMoves else 0.0 for x in range(game.getActionSize())]
+            # add dirichlet noise
+            noise = np.random.gamma(0.3, 1, len(policy_predicted))
+            frac = 0.25 #config.root_exploration_fraction
+            policy_predicted = np.array(list(map(lambda p, n : p * (1-frac) + n * frac, policy_predicted, noise)))
+            policy = policy_predicted * moves
+              # masking invalid moves
+
             sum_Policies = np.sum(policy)
             if sum_Policies > 0:
                 policy /= sum_Policies  # renormalize

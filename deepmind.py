@@ -2,6 +2,7 @@
 
 from __future__ import division
 
+import functools
 import math
 import numpy as np
 import tensorflow as tf
@@ -12,6 +13,7 @@ from typing import List
 import mcts2
 import moara
 import os
+import copy
 
 ValidMovesFromState = {}
 
@@ -28,7 +30,7 @@ class AlphaZeroConfig(object):
 
         self.num_sampling_moves = 30
         self.max_moves = 512  # for chess and shogi, 722 for Go.
-        self.num_simulations = 800
+        self.num_simulations = 50
 
         # Root prior exploration noise.
         self.root_dirichlet_alpha = 0.3  # for chess, 0.03 for Go and 0.15 for shogi.
@@ -54,6 +56,13 @@ class AlphaZeroConfig(object):
             500e3: 2e-4
         }
 
+        self.num_channels = 512
+        self.dropout = 0.3
+        self.lr = 0.001
+
+
+config: AlphaZeroConfig = AlphaZeroConfig()
+
 
 class Node(object):
 
@@ -64,6 +73,9 @@ class Node(object):
         self.value_sum = 0
         self.children = {}
 
+    def __repr__(self):
+        return f"s:{self.value():0.2f} vis:{self.visit_count} p:{self.prior:0.2f} c:{len(self.children)} to_play:{self.to_play}"
+
     def expanded(self):
         return len(self.children) > 0
 
@@ -72,20 +84,23 @@ class Node(object):
             return 0
         return self.value_sum / self.visit_count
 
+    def setPrior(self, prior: float):
+        self.prior = prior
+
 
 class GameProtocol(object):
 
     def __init__(self, history=None):
         self.history = history or []
         self.child_visits = []
-        self.num_actions = 4672  # action space size for chess; 11259 for shogi, 362 for Go
 
     def terminal(self):
         # Game specific termination rules.
         pass
 
     def terminal_value(self, to_play):
-        # Game specific value.
+        # Game specific value - current score for the position,
+        # should be called when game is already finished -1, 1, 0
         pass
 
     def legal_actions(self):
@@ -99,17 +114,18 @@ class GameProtocol(object):
         self.history.append(action)
 
     def store_search_statistics(self, root):
-        sum_visits = sum(child.visit_count for child in root.children.itervalues())
+        sum_visits = sum(child.visit_count for child in root.children.values())
         self.child_visits.append([
             root.children[a].visit_count / sum_visits if a in root.children else 0
-            for a in range(self.num_actions)
+            for a in range(self.NUM_ACTIONS)
         ])
 
     def make_image(self, state_index: int):
-        # Game specific feature planes.
+        # Game specific feature planes from specified move.
         return []
 
     def make_target(self, state_index: int):
+        # tuple of game result and actions counts
         return (self.terminal_value(state_index % 2),
                 self.child_visits[state_index])
 
@@ -120,171 +136,326 @@ class GameProtocol(object):
 class Moara(GameProtocol):
     VALID_MOVES = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.VALID_MOVES]
     MILLS = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.MILLS]
+    BOARD_X = 8
+    BOARD_Y = 3
+    BOARD_SIZE = BOARD_X * BOARD_Y
+    NUM_ACTIONS = (BOARD_SIZE +  # put at
+                   BOARD_SIZE +  # put at which creates a mill (need capture) - there must be two of this in the history
+                   BOARD_SIZE +  # moving from - there must be two of these
+                   BOARD_SIZE  # capture from
+                   )
+
+    NUM_FEATURES = (1 +  # board for player 1
+                    1 +  # board for player 2
+                    1 +  # rotated board for player 1
+                    1 +  # rotated board for player 2
+                    1 +  # unused pieces for player 1
+                    1 +  # unused pieces for player 2
+                    1)  # color
+    NUM_STEPS = 4  # keep current state and previous 7
+    planes = (NUM_STEPS * NUM_FEATURES +
+              # 1 +  # no of repetitions for current board, uniform value over array
+              1)  # total moves, uniform value over array
 
     def __init__(self, history=None):
         super().__init__(history)
-        self.board_X = 8
-        self.board_Y = 3
-        self.boardSize = self.board_X * self.board_Y
-        # 1 if capture is to be made by current player
-        # -1 if capture is to be made by opponent
-        # 0 no capture
-        self.boardStatus = 0
-        self.unusedPieces = [9, 9]  # for opponent, player
-        self.playerAtMove = 1
-        self.internalArray = np.array([0] * self.boardSize)
-        # list of moves
-        self.moves = []
-        # number of moves since last capture
+
+        # dynamic state
+        self.internalArray = np.array([0] * self.BOARD_SIZE)
+        self.unusedPieces = [0, 0]
         self.noMovesWithoutCapture = 0
-        # number of total moves
         self.noMoves = 0
-        self.time_len = 4  # keep current state and previous 7
-        self.feature_len = 0  # number of planes describing current board
-        self.num_actions = (self.boardSize +  # piece position
-                            # self.boardSize * self.boardSize +  # move/jump pieces
-                            1)  # pass
-        self.moves.append(str(self))
+        self.playerPieces = [0, 0]
+
+        # using current history, generate various states
+        for index, action in enumerate(self.history):
+            self.do_action(action, index)
+        self.generate_state_from_history()
 
     # string representation of the current position in the game
     def __repr__(self):
         board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
-        player = 'x' if self.playerAtMove == 1 else 'o'
-        statusSign = 'x' if self.boardStatus >= 1 else 'o' if self.boardStatus <= -1 else '_'
-        statusValue = abs(self.boardStatus)
-        return f"{board}{self.getUnusedPlayerCount(1)}{self.getUnusedPlayerCount(-1)}{player}{statusSign}{statusValue:02d}"
+        player = 'x' if self.to_play() == 0 else 'o'
+        # moves = functools.reduce(lambda acc, i: f"{acc}.{i}", self.history, "")
+        last_action = self.history[-1] if self.noMoves > 0 else -1
+        last_last_action = self.history[-2] if self.noMoves > 1 else -1
+        return f"{board}{self.unusedPieces[0]}{self.unusedPieces[1]}{player} {last_last_action}.{last_action}"
 
-    def getUnusedPlayerCount(self, player):
-        return self.unusedPieces[(player + 1) // 2]
+    def clone(self):
+        return Moara(list(self.history))
 
-    def getPlayerCount(self, player):
-        no_pieces_on_board = len([0 for pos in range(self.boardSize) if self.internalArray[pos] == player])
-        return no_pieces_on_board + self.getUnusedPlayerCount(player)
+    def generate_state_from_history(self):
 
-    def getValidMoves(self, player):
-        orig = -1
-        dest = -1
+        self.noMoves = len(self.history)
+        # calculate the number of unused pieces:
+        # for each move from the beginning a piece must be put,
+        # so after 18 moves, all must be used
+        # but removing any capture moves (this come in pairs)
+        only_put_actions: int = len(set([action for action in self.history if action < 2 * self.BOARD_SIZE]))
+        self.unusedPieces = [max(0, 9 - (only_put_actions + 1) // 2), max(0, 9 - (only_put_actions + 0) // 2)]
 
+        self.playerPieces = [
+            len([0 for pos in range(self.BOARD_SIZE) if self.internalArray[pos] == 1]) + self.unusedPieces[0],
+            len([0 for pos in range(self.BOARD_SIZE) if self.internalArray[pos] == -1]) + self.unusedPieces[1]]
+
+        # count moves until a capture move is made
+        list_of_captures = [self.history.index(x) for x in self.history if x > self.BOARD_SIZE * 3]
+        self.noMovesWithoutCapture = (len(self.history) - 1 - list_of_captures[-1]) if len(
+            list_of_captures) > 0 else len(self.history)
+        pass
+
+    def getValidMoves(self):
         # memoization
         s = str(self)
         if s in ValidMovesFromState:
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
-            return ValidMovesFromState[s]
-            # else:
-        result = []
-        moves = []
-        capture = []
-        if self.boardStatus != 0 and np.sign(self.boardStatus) == -player:
-            result = [self.boardSize]  # pass
-            ValidMovesFromState[s] = result
-            # self.SaveValidMoves()
+            result = ValidMovesFromState[s]
             return result
-        boardStatus = abs(self.boardStatus)
-        if boardStatus == 0:
-            if self.getUnusedPlayerCount(player) > 0:  # put
-                # phase 1: can put anywhere where there is an empty place
-                result = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+            # else:
+        result_1 = []
+        result = []
+        last_action = self.history[-1] if self.noMoves > 0 else -1
+        last_last_action = self.history[-2] if self.noMoves > 1 else -1
+        need_to_pass = last_action >= self.BOARD_SIZE and last_action < self.BOARD_SIZE * 3 and last_last_action != last_action
+        if need_to_pass:
+            return [last_action]
+        need_to_select_move = last_action >= self.BOARD_SIZE * 2 and last_action < self.BOARD_SIZE * 3 and last_action == last_last_action
+        need_to_finish_capture = last_action >= self.BOARD_SIZE * 1 and last_action < self.BOARD_SIZE * 2 and last_action == last_last_action
+        need_to_put = not need_to_finish_capture and self.unusedPieces[self.to_play()] > 0
+        player_color = 1 if self.to_play() == 0 else -1
+
+        if need_to_put:  # put
+            # phase 1: can put anywhere where there is an empty place
+            result_1 = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == 0]
+        elif need_to_finish_capture:
+            # select an opponent not in a mill
+            all_opponent_pieces = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == -player_color]
+            # that are not in an enemy mill
+            available_opponent_pieces = list(filter(lambda p: self.isInAMill(p, -player_color) is False,
+                                                    all_opponent_pieces))
+            if len(available_opponent_pieces) == 0:
+                # if no available enemy piece to capture outside of aa mill
+                # retry with a piece from an enemy mill
+                # invariantBoard.display()
+                available_opponent_pieces = all_opponent_pieces
+            # for each available opponent piece to be captured
+            result = [x + self.BOARD_SIZE * 3 for x in available_opponent_pieces]
+        elif need_to_select_move:
+            #select moves that start from the position and are empty
+            if self.playerPieces[self.to_play()] > 3:
+                valid_moves = list(filter(lambda x: x[0] == last_action % self.BOARD_SIZE, self.VALID_MOVES))
+                # transform into index in action moves
+                result_1 = [v_m for v_m in set([x[1] for x in valid_moves]) if self.internalArray[v_m] == 0]
             else:
-                if self.getPlayerCount(player) > 3:  # move
-                    # select starting points for the move
-                    valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player and
-                                                        self.internalArray[x[1]] == 0,
-                                              self.VALID_MOVES))
-                    result = [x[0] for x in valid_moves]
-                else:  # jump
-                    result = [x for x in range(self.boardSize) if self.internalArray[x] == player]
+                #jump - all free places
+                result_1 = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == 0]
         else:
-            if boardStatus == self.boardSize + 1:
-                # find all opponents available to capture
-                all_opponent_pieces = [x for x in range(self.boardSize) if self.internalArray[x] == -player]
-                # that is not an enemy mill
-                available_opponent_pieces = list(
-                    filter(lambda p: self.isInAMill(p, -player) is False, all_opponent_pieces))
-                if len(available_opponent_pieces) == 0:
-                    # if no available enemy piece to capture outside of aa mill
-                    # retry with a piece from an enemy mill
-                    # invariantBoard.display()
-                    available_opponent_pieces = all_opponent_pieces
-                # for each available opponent piece to be captured
-                result = available_opponent_pieces
-            else:
-                # move or capture, and the status contains the destination
-                if self.getPlayerCount(player) > 3:  # move
-                    # self.display()
-                    if self.internalArray[boardStatus - 1] != player:
-                        assert (self.internalArray[boardStatus - 1] == player)
-                    # select all moves that start from the (status - 1)
-                    valid_moves = list(
-                        filter(lambda x: x[0] == boardStatus - 1 and self.internalArray[x[1]] == 0, self.VALID_MOVES))
-                    # destination point
-                    result = [x[1] for x in valid_moves]
-                else:  # jump
-                    result = [x for x in range(self.boardSize) if self.internalArray[x] == 0]
+            # move - select all positions from which a move can be started
+            if self.playerPieces[self.to_play()] > 3:  # move
+                valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player_color and self.internalArray[x[1]] == 0, self.VALID_MOVES))
+                result = [v_m + 2 * self.BOARD_SIZE for v_m in set([x[0] for x in valid_moves])]
+            else:  # jump
+                remaining = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == player_color]
+                result = [r + 2 * self.BOARD_SIZE for r in remaining]
+        # for each possible move, determine if it forms a mill
+        # if so then can capture any of the opponent pieces, that are not in a mill
+        for possible_action in result_1:
+            # there is also an origin to the move:
+            # if (move % self.possibleMovesSize) > self.boardSize:
+            #     orig = (move % self.possibleMovesSize) // self.boardSize - 1;
+            mills = self.getMills(possible_action)  # any pos is in two mills
+            wouldBeInMill = False
+            for mill in mills:
+                copy_of_internal_array = np.array(self.internalArray)
+                copy_of_internal_array[possible_action] = player_color
+                # if orig != -1:
+                #     copy_of_internal_array[orig] = 0
+                sum_mill = copy_of_internal_array[mill[0]] + \
+                           copy_of_internal_array[mill[1]] + \
+                           copy_of_internal_array[mill[2]]
+
+                if sum_mill == 3 * player_color:
+                    wouldBeInMill = True
+                    break
+
+            if wouldBeInMill:
+                # need to signal that this move will require a capture
+                result.append(possible_action + 1 * self.BOARD_SIZE)
+            else:  # no mill, no capture
+                result.append(possible_action)
 
         ValidMovesFromState[s] = result
         # self.SaveValidMoves()
         return result
 
+    def apply(self, action):
+
+        category = action // self.BOARD_SIZE
+        move = action % self.BOARD_SIZE
+        player_color = 1 if self.to_play() == 0 else -1
+        last_action = self.history[-1] if self.noMoves > 0 else -1
+        last_last_action = self.history[-2] if self.noMoves > 1 else -1
+
+        if category == 0:
+            if last_action != -1 and last_action == last_last_action:#part 2 of a move
+                origin = last_action % self.BOARD_SIZE
+                if self.internalArray[origin] != player_color:
+                    NOP = 0
+                assert (self.internalArray[origin] == player_color)
+                if self.internalArray[move] != 0:
+                    NOP = 0
+                assert (self.internalArray[move] == 0)
+                self.internalArray[origin] = 0
+                self.internalArray[move] = player_color
+            else:#put a piece from unused
+                assert (self.internalArray[move] == 0)
+                self.internalArray[move] = player_color
+                self.unusedPieces[self.to_play()] -= 1
+                self.noMoves += 1
+                self.noMovesWithoutCapture += 1
+        elif category == 1:
+            if last_action == action:
+                # the move is for the opponent, pass
+                self.noMoves += 1
+                self.noMovesWithoutCapture += 1
+            elif last_action == last_last_action:#move & prepare capture
+                origin = last_action % self.BOARD_SIZE
+                assert (self.internalArray[origin] == player_color)
+                assert (self.internalArray[move] == 0)
+                self.internalArray[origin] = 0
+                self.internalArray[move] = player_color
+            else:
+                # put the piece, and an opponent pieces will be selected for removal
+                assert (self.internalArray[move] == 0)
+                self.internalArray[move] = player_color
+                self.unusedPieces[self.to_play()] -= 1
+                self.noMoves += 1
+                self.noMovesWithoutCapture += 1
+        elif category == 3:
+            # eliminate a piece
+            assert (self.internalArray[move] == -player_color)
+            self.internalArray[move] = 0
+            self.noMoves += 1
+            self.noMovesWithoutCapture = 0  # reset it
+            self.playerPieces[0 if self.to_play() == 1 else 1] -= 1
+        else:  # prepare move to destination
+            if last_action == action:
+                # the move is for the opponent, pass
+                self.noMoves += 1
+                self.noMovesWithoutCapture += 1
+            else:#move for player, step 1, do nothing
+                self.noMoves += 1
+                self.noMovesWithoutCapture = 0  # reset it
+                assert (self.internalArray[action % self.BOARD_SIZE] == player_color)
+
+        self.history.append(action)
+        return
+
+
+    def decUnusedPlayerCount(self, player):
+        self.unusedPieces[(player + 1) // 2] -= 1
+
+    def isInAMill(self, pos, player):
+        # find all mills that contain the pos
+        mill_list = self.getMills(pos)
+        return list(filter(lambda x: self.getMillSum(x) == 3 * player, mill_list)) != []
+
+    # get the mills that contain position
+    def getMills(self, pos):
+        return list(filter(lambda mill: list(filter(lambda p: p == pos, mill)) != [], self.MILLS))
+
+    # get the sum of content of the mill
+    def getMillSum(self, mill):
+        return (self.internalArray[mill[0]] +
+                self.internalArray[mill[1]] +
+                self.internalArray[mill[2]])
+
     def legal_actions(self):
         # Game specific calculation of legal actions.
-        return self.getValidMoves(1)
+        return self.getValidMoves()
+
+    def do_action(self, action, state_index):
+        category = action // self.BOARD_SIZE
+        move = action % self.BOARD_SIZE
+        last_action = self.history[state_index - 1] if state_index > 0 else -1
+        last_last_action = self.history[state_index - 2] if state_index > 1 else -1
+        # put piece
+        if category == 0 or category == 1:
+            if action != last_action:
+                self.internalArray[move] = 1 if state_index % 2 == 0 else -1
+                # if it's part of a move
+                if last_action // self.BOARD_SIZE == 2 and last_action == last_last_action:
+                    self.internalArray[last_action % self.BOARD_SIZE] = 0
+        # remove piece from location
+        if category == 3:
+            if action != last_action:
+                self.internalArray[move] = 0
+
+    def undo_action(self, action):
+        category = action // self.BOARD_SIZE
+        move = action % self.BOARD_SIZE
+        last_action = self.history[-2] if self.noMoves > 1 else -1
+        last_category = last_action // self.BOARD_SIZE
+        player = 1 if len(self.history) % 2 == 0 else -1
+        # put piece -> remove piece
+        if category == 0 or category == 1 and action != last_action:
+            self.internalArray[move] = 0
+            #if it's part of a move
+            if last_action // self.BOARD_SIZE == 2:
+                self.internalArray[move] = player
+        # put piece back
+        if last_category == 2 and action != last_action:  # put own piece back
+            self.internalArray[move] = player
+        if category == 3 and action != last_action: #put opponent piece back
+            self.internalArray[move] = -player
+
+        self.history = self.history[:-1]
+        self.generate_state_from_history()
+        pass
 
     def make_image(self, state_index: int):
         # Game specific feature planes.
-        return self.getInternalRepresentation()
-
-    def getInternalRepresentation(self):
-        self.feature_len = (1 +  # board for player 1
-                            1 +  # board for player 2
-                            1 +  # rotated board for player 1
-                            1 +  # rotated board for player 2
-                            1 +  # unused pieces for player 1
-                            1 +  # unused pieces for player 2
-                            1 +  # color
-                            1)  # board status
         result = []
-        planes = (self.time_len * self.feature_len +
-                  # 1 +  # no of repetitions for current board, uniform value over array
+        # if state is -1 return use current position
+        # otherwise generate from the specified position
 
-                  1)  # total moves, uniform value over array
-
+        if state_index != -1:
+            # generate a clone up to the specified state_index
+            local = Moara(self.history[: min(state_index, len(self.history))])
+        else:
+            local = self.clone()
+        noMovesWithoutCapture = local.noMovesWithoutCapture
         # propagate back in temporal array
-        for i in range(self.time_len):  # i = 0, is the oldest
+        for i in range(self.NUM_STEPS):  # i = 0, is the oldest
             # use historical moves, extract from history, if enough moves where made
-            if len(self.moves) <= i:
-                for j in range(self.feature_len):
-                    result.append([0] * self.boardSize)
+            if len(local.history) < i:
+                result += [[0] * self.BOARD_SIZE for _ in range(self.NUM_FEATURES)]
             else:
-                l = list(self.moves[len(self.moves) - 1 - i])
-                board = [1 if l[x] == 'x' else -1 if l[x] == 'o' else 0 for x in range(self.boardSize)]
+                if i > 0:
+                    action = local.history[-1]
+                    # undo action on the current board
+                    local.undo_action(action)
 
                 # normal board for player 1
-                result.append([1 if x == 1 else 0 for x in board])
+                result.append([1 if x == 1 else 0 for x in local.internalArray])
                 # normal board for player 2
-                result.append([1 if x == -1 else 0 for x in board])
+                result.append([1 if x == -1 else 0 for x in local.internalArray])
                 arr2 = np.array(self.MILLS).reshape(48)
                 # rotate board
-                rot = [board[arr2[x + self.boardSize]] for x in range(self.boardSize)]
+                rot = [local.internalArray[arr2[x + self.BOARD_SIZE]] for x in range(self.BOARD_SIZE)]
                 # rotated board for player 1
                 result.append([1 if x == 1 else 0 for x in rot])
                 # rotated board for player 2
                 result.append([1 if x == -1 else 0 for x in rot])
 
-                unusedPlayer1 = int(l[self.boardSize])
-                unusedPlayer2 = int(l[self.boardSize + 1])
+                local.generate_state_from_history()
                 # unused pieces for player 1
-                result.append([unusedPlayer1] * self.boardSize)
+                result.append([local.unusedPieces[0]] * self.BOARD_SIZE)
                 # unused pieces for player 2
-                result.append([unusedPlayer2] * self.boardSize)
+                result.append([local.unusedPieces[1]] * self.BOARD_SIZE)
 
-                player = 1 if l[self.boardSize + 2] == 'x' else -1
-                statusSign = 1 if l[self.boardSize + 3] == 'x' else -1 if l[self.boardSize + 3] == 'o' else 0
-                statusValue = int(l[self.boardSize + 4]) * 10 + int(l[self.boardSize + 5])
-                status = statusValue * statusSign
                 # player at move
-                result.append([player] * self.boardSize)
-                # board status
-                result.append([status] * self.boardSize)
+                result.append([local.to_play()] * self.BOARD_SIZE)
 
         # # repetition
         # s = str(self)
@@ -293,28 +464,37 @@ class Moara(GameProtocol):
         # # total moves
         # result.append([self.noMoves] * self.boardSize)
         # total moves without capture
-        result.append([self.noMovesWithoutCapture] * self.boardSize)
+        result.append([noMovesWithoutCapture] * self.BOARD_SIZE)
 
         return result
 
     def terminal(self):
         # Game specific termination rules.
         if self.noMovesWithoutCapture > 100:
-            return True  # 0.00000000001  # draw
-        if self.getPlayerCount(self.playerAtMove) < 3:
-            return True  # -1 * self.playerAtMove
-        if self.getPlayerCount(-self.playerAtMove) < 3:
-            return True  # 1 * self.playerAtMove
-        player_valid_moves_list = self.getValidMoves(self.playerAtMove)
-        if player_valid_moves_list == []:
+            return True
+        if self.playerPieces[0] < 3:
+            return True
+        if self.playerPieces[1] < 3:
+            return True
+        if not self.getValidMoves():
             # self.display()
-            return True  # -1 * self.playerAtMove
+            return True
         return False
+
+    def terminal_value(self, to_play):
+        # Game specific value - current score for the position,
+        # should be called when game is already finished -1, 1, 0
+        if self.playerPieces < 3:
+            return -1 if to_play == 0 else 1
+        if self.opponentPieces < 3 or self.getValidMoves():
+            return 1 if to_play == 0 else -1
+        # draw
+        return 0
 
 
 class ReplayBuffer(object):
 
-    def __init__(self, config: AlphaZeroConfig):
+    def __init__(self):
         self.window_size = config.window_size
         self.batch_size = config.batch_size
         self.buffer = []
@@ -346,36 +526,35 @@ class Network(object):
 
 
 class NeuralNet(Network):
-    def __init__(self, game:GameProtocol, args):
-        self.args = args
-        self.action_size = game.num_actions
-        self.board_x = game.board_X  # lines
-        self.board_y = game.board_Y  # columns
-        self.planes = len(game.getInternalRepresentation())
+    def __init__(self):
+        self.action_size = Moara.NUM_ACTIONS
+        self.board_x = Moara.BOARD_X  # lines
+        self.board_y = Moara.BOARD_Y  # columns
+        self.planes = Moara.planes
 
         self.input_boards = Input(shape=(self.planes, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
 
         x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, self.planes))(
             self.input_boards))  # batch_size  x board_x x board_y x 1
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
             x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
             h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='same')(
+        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
             h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(self.args.num_channels, 3, padding='valid')(
+        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='valid')(
             h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
         h_conv4_flat = Flatten()(h_conv4)
-        s_fc1 = Dropout(self.args.dropout)(
+        s_fc1 = Dropout(config.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        s_fc2 = Dropout(self.args.dropout)(
+        s_fc2 = Dropout(config.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
         self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
         self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], loss_weights=[1., 5.],
-                           optimizer=Adam(self.args.lr))
+                           optimizer=Adam(config.lr))
         print(self.model.summary())
 
     def inference(self, image):
@@ -389,10 +568,10 @@ class NeuralNet(Network):
             v: a float in [-1,1] that gives the value of the current board
         """
         inputData = np.array(image).reshape(self.planes, self.board_x, self.board_y)
-
+        #
         inputData = inputData[np.newaxis, :, :]
         pi, v = self.model.predict(inputData)
-        return pi[0], v[0]
+        return pi[0], v[0][0]
 
     def train(self, examples):
         """
@@ -468,7 +647,7 @@ class SharedStorage(object):
 
     def latest_network(self) -> Network:
         if self._networks:
-            return self._networks[max(self._networks.iterkeys())]
+            return self._networks[max(self._networks.keys())]
         else:
             return make_uniform_network()  # policy -> uniform, value -> 0.5
 
@@ -480,7 +659,6 @@ class SharedStorage(object):
 ##########################
 
 
-
 ##################################
 ####### Part 1: Self-Play ########
 
@@ -488,22 +666,22 @@ class SharedStorage(object):
 # Each self-play job is independent of all others; it takes the latest network
 # snapshot, produces a game and makes it available to the training job by
 # writing it to a shared replay buffer.
-def run_selfplay(config: AlphaZeroConfig, storage: SharedStorage,
-                 replay_buffer: ReplayBuffer):
+def run_selfplay(storage: SharedStorage, replay_buffer: ReplayBuffer):
     while True:
         network = storage.latest_network()
-        game = play_game(config, network)
+        game = play_game(network)
         replay_buffer.save_game(game)
 
 
 # Each game is produced by starting at the initial board position, then
 # repeatedly executing a Monte Carlo Tree Search to generate moves until the end
 # of the game is reached.
-def play_game(config: AlphaZeroConfig, network: Network):
+def play_game(network: Network):
     game = Moara()
-    while not game.terminal() and len(game.history) < config.max_moves:
-        action, root = run_mcts(config, game, network)
+    while not game.terminal() and game.noMoves < config.max_moves:
+        action, root = run_mcts(game, network)
         game.apply(action)
+        print(f"{len(game.history):03d} {game.playerPieces[0]}:{game.playerPieces[1]} {root.value():0.2f} {game}")
         game.store_search_statistics(root)
     return game
 
@@ -512,10 +690,10 @@ def play_game(config: AlphaZeroConfig, network: Network):
 # To decide on an action, we run N simulations, always starting at the root of
 # the search tree and traversing the tree according to the UCB formula until we
 # reach a leaf node.
-def run_mcts(config: AlphaZeroConfig, game: GameProtocol, network: Network):
+def run_mcts(game: GameProtocol, network: Network):
     root = Node(0)
     evaluate(root, game, network)
-    add_exploration_noise(config, root)
+    add_exploration_noise(root)
 
     for _ in range(config.num_simulations):
         node = root
@@ -523,18 +701,18 @@ def run_mcts(config: AlphaZeroConfig, game: GameProtocol, network: Network):
         search_path = [node]
 
         while node.expanded():
-            action, node = select_child(config, node)
+            action, node = select_child(node)
             scratch_game.apply(action)
             search_path.append(node)
 
         value = evaluate(node, scratch_game, network)
         backpropagate(search_path, value, scratch_game.to_play())
-    return select_action(config, game, root), root
+    return select_action(game, root), root
 
 
-def select_action(config: AlphaZeroConfig, game: GameProtocol, root: Node):
+def select_action(game: GameProtocol, root: Node):
     visit_counts = [(child.visit_count, action)
-                    for action, child in root.children.iteritems()]
+                    for action, child in root.children.items()]
     if len(game.history) < config.num_sampling_moves:
         _, action = softmax_sample(visit_counts)
     else:
@@ -543,15 +721,15 @@ def select_action(config: AlphaZeroConfig, game: GameProtocol, root: Node):
 
 
 # Select the child with the highest UCB score.
-def select_child(config: AlphaZeroConfig, node: Node):
-    _, action, child = max((ucb_score(config, node, child), action, child)
-                           for action, child in node.children.items())
+def select_child(node: Node):
+    scores = [(ucb_score(node, child), action, child) for action, child in node.children.items()]
+    _, action, child = max(scores)
     return action, child
 
 
 # The score for a node is based on its value, plus an exploration bonus based on
 # the prior.
-def ucb_score(config: AlphaZeroConfig, parent: Node, child: Node):
+def ucb_score(parent: Node, child: Node):
     pb_c = math.log((parent.visit_count + config.pb_c_base + 1) /
                     config.pb_c_base) + config.pb_c_init
     pb_c *= math.sqrt(parent.visit_count) / (child.visit_count + 1)
@@ -569,8 +747,7 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
     node.to_play = game.to_play()
     policy = {a: math.exp(policy_logits[a]) for a in game.legal_actions()}
     policy_sum = sum(policy.values())
-    for action, p in policy.items():
-        node.children[action] = Node(p / policy_sum)
+    node.children = {action: Node(p / policy_sum) for action, p in policy.items()}
     return value
 
 
@@ -578,18 +755,20 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
 # tree to the root.
 def backpropagate(search_path: List[Node], value: float, to_play):
     for node in search_path:
-        node.value_sum += value if node.to_play == to_play else (1 - value)
         node.visit_count += 1
+        node.value_sum += value if node.to_play == to_play else (1 - value)
 
 
 # At the start of each search, we add dirichlet noise to the prior of the root
 # to encourage the search to explore new actions.
-def add_exploration_noise(config: AlphaZeroConfig, node: Node):
+def add_exploration_noise(node: Node):
     actions = node.children.keys()
     noise = np.random.gamma(config.root_dirichlet_alpha, 1, len(actions))
     frac = config.root_exploration_fraction
-    for a, n in zip(actions, noise):
-        node.children[a].prior = node.children[a].prior * (1 - frac) + n * frac
+    # for a, n in zip(actions, noise):
+    #     node.children[a].prior = node.children[a].prior * (1 - frac) + n * frac
+
+    [node.children[a].setPrior(node.children[a].prior * (1 - frac) + n * frac) for a, n in zip(actions, noise)]
 
 
 ######### End Self-Play ##########
@@ -639,7 +818,10 @@ def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
 # Stubs to make the typechecker happy, should not be included in pseudocode
 # for the paper.
 def softmax_sample(d):
-    return 0, 0
+    # normalization
+    probabilities = [x[0] / config.num_simulations for x in d]
+    res = np.random.choice(len(probabilities), p=probabilities)
+    return d[res]
 
 
 def launch_job(f, *args):
@@ -647,7 +829,8 @@ def launch_job(f, *args):
 
 
 def make_uniform_network():
-    return n
+    # return new network
+    return NeuralNet()
 
 
 # AlphaZero training is split into two independent parts: Network training and
@@ -655,20 +838,20 @@ def make_uniform_network():
 # These two parts only communicate by transferring the latest network checkpoint
 # from the training to the self-play, and the finished games from the self-play
 # to the training.
-def alphazero(config: AlphaZeroConfig):
+def alphazero():
     storage = SharedStorage()
-    replay_buffer = ReplayBuffer(config)
+    replay_buffer = ReplayBuffer()
 
     for i in range(config.num_actors):
-        launch_job(run_selfplay, config, storage, replay_buffer)
+        launch_job(run_selfplay, storage, replay_buffer)
 
-    train_network(config, storage, replay_buffer)
+    train_network(storage, replay_buffer)
 
     return storage.latest_network()
 
 
-moaraGame = Moara()
-n = NeuralNet(moaraGame, mcts2.moara.args)
-n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
-
-alphazero(AlphaZeroConfig())
+# moaraGame = Moara()
+# globalNeuralNet = NeuralNet(moaraGame, mcts2.moara.args)
+# n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+config: AlphaZeroConfig = AlphaZeroConfig()
+alphazero()
