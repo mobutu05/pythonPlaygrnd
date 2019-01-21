@@ -14,6 +14,7 @@ import mcts2
 import moara
 import os
 import copy
+from threading import Thread
 
 ValidMovesFromState = {}
 
@@ -26,7 +27,7 @@ class AlphaZeroConfig(object):
 
     def __init__(self):
         ### Self-Play
-        self.num_actors = 5000
+        self.num_actors = 1
 
         self.num_sampling_moves = 30
         self.max_moves = 512  # for chess and shogi, 722 for Go.
@@ -174,12 +175,12 @@ class Moara(GameProtocol):
 
     # string representation of the current position in the game
     def __repr__(self):
-        board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
-        player = 'x' if self.to_play() == 0 else 'o'
+        _board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.internalArray])
+        _player = 'x' if self.to_play() == 0 else 'o'
         # moves = functools.reduce(lambda acc, i: f"{acc}.{i}", self.history, "")
-        last_action = self.history[-1] if self.noMoves > 0 else -1
-        last_last_action = self.history[-2] if self.noMoves > 1 else -1
-        return f"{board}{self.unusedPieces[0]}{self.unusedPieces[1]}{player} {last_last_action}.{last_action}"
+        _last_action = self.history[-1] if len(self.history) > 0 else -1
+        _last_last_action = self.history[-2] if len(self.history) > 1 else -1
+        return f"{_board}{self.unusedPieces[0]}{self.unusedPieces[1]}{_player} [{_last_last_action}:{_last_action}]"
 
     def clone(self):
         return Moara(list(self.history))
@@ -347,7 +348,6 @@ class Moara(GameProtocol):
                 self.noMoves += 1
                 self.noMovesWithoutCapture = 0  # reset it
                 assert (self.internalArray[action % self.BOARD_SIZE] == player_color)
-
         self.history.append(action)
         return
 
@@ -778,7 +778,7 @@ def add_exploration_noise(node: Node):
 ####### Part 2: Training #########
 
 
-def train_network(config: AlphaZeroConfig, storage: SharedStorage,
+def train_network(storage: SharedStorage,
                   replay_buffer: ReplayBuffer):
     network = Network()
     optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
@@ -825,7 +825,10 @@ def softmax_sample(d):
 
 
 def launch_job(f, *args):
-    f(*args)
+    # f(*args)
+    thread = Thread(target=f, args=args)
+    thread.start()
+    # thread.join()
 
 
 def make_uniform_network():
