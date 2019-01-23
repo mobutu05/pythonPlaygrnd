@@ -4,6 +4,8 @@ from __future__ import division
 
 import functools
 import math
+import time
+
 import numpy as np
 import tensorflow as tf
 from keras import Input, Model
@@ -14,7 +16,7 @@ import mcts2
 import moara
 import os
 import copy
-from threading import Thread
+from threading import Thread, Lock
 
 ValidMovesFromState = {}
 
@@ -61,21 +63,25 @@ class AlphaZeroConfig(object):
         self.dropout = 0.3
         self.lr = 0.001
 
+        self.checkpoint = './temp/'
+        self.filename = 'Deepmind'
+
 
 config: AlphaZeroConfig = AlphaZeroConfig()
 
 
 class Node(object):
 
-    def __init__(self, prior: float):
+    def __init__(self, prior: float, description):
         self.visit_count = 0
         self.to_play = -1
         self.prior = prior
         self.value_sum = 0
         self.children = {}
+        self.description = description
 
     def __repr__(self):
-        return f"s:{self.value():0.2f} vis:{self.visit_count} p:{self.prior:0.2f} c:{len(self.children)} to_play:{self.to_play}"
+        return f"s:{self.value():0.5f} vis:{self.visit_count} p:{self.prior:0.2f} c:{len(self.children)} to_play:{self.to_play} {self.description}"
 
     def expanded(self):
         return len(self.children) > 0
@@ -242,18 +248,20 @@ class Moara(GameProtocol):
             # for each available opponent piece to be captured
             result = [x + self.BOARD_SIZE * 3 for x in available_opponent_pieces]
         elif need_to_select_move:
-            #select moves that start from the position and are empty
+            # select moves that start from the position and are empty
             if self.playerPieces[self.to_play()] > 3:
                 valid_moves = list(filter(lambda x: x[0] == last_action % self.BOARD_SIZE, self.VALID_MOVES))
                 # transform into index in action moves
                 result_1 = [v_m for v_m in set([x[1] for x in valid_moves]) if self.internalArray[v_m] == 0]
             else:
-                #jump - all free places
+                # jump - all free places
                 result_1 = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == 0]
         else:
             # move - select all positions from which a move can be started
             if self.playerPieces[self.to_play()] > 3:  # move
-                valid_moves = list(filter(lambda x: self.internalArray[x[0]] == player_color and self.internalArray[x[1]] == 0, self.VALID_MOVES))
+                valid_moves = list(
+                    filter(lambda x: self.internalArray[x[0]] == player_color and self.internalArray[x[1]] == 0,
+                           self.VALID_MOVES))
                 result = [v_m + 2 * self.BOARD_SIZE for v_m in set([x[0] for x in valid_moves])]
             else:  # jump
                 remaining = [x for x in range(self.BOARD_SIZE) if self.internalArray[x] == player_color]
@@ -298,7 +306,7 @@ class Moara(GameProtocol):
         last_last_action = self.history[-2] if self.noMoves > 1 else -1
 
         if category == 0:
-            if last_action != -1 and last_action == last_last_action:#part 2 of a move
+            if last_action != -1 and last_action == last_last_action:  # part 2 of a move
                 origin = last_action % self.BOARD_SIZE
                 if self.internalArray[origin] != player_color:
                     NOP = 0
@@ -308,7 +316,7 @@ class Moara(GameProtocol):
                 assert (self.internalArray[move] == 0)
                 self.internalArray[origin] = 0
                 self.internalArray[move] = player_color
-            else:#put a piece from unused
+            else:  # put a piece from unused
                 assert (self.internalArray[move] == 0)
                 self.internalArray[move] = player_color
                 self.unusedPieces[self.to_play()] -= 1
@@ -319,7 +327,7 @@ class Moara(GameProtocol):
                 # the move is for the opponent, pass
                 self.noMoves += 1
                 self.noMovesWithoutCapture += 1
-            elif last_action == last_last_action:#move & prepare capture
+            elif last_action == last_last_action:  # move & prepare capture
                 origin = last_action % self.BOARD_SIZE
                 assert (self.internalArray[origin] == player_color)
                 assert (self.internalArray[move] == 0)
@@ -344,13 +352,12 @@ class Moara(GameProtocol):
                 # the move is for the opponent, pass
                 self.noMoves += 1
                 self.noMovesWithoutCapture += 1
-            else:#move for player, step 1, do nothing
+            else:  # move for player, step 1, do nothing
                 self.noMoves += 1
                 self.noMovesWithoutCapture = 0  # reset it
                 assert (self.internalArray[action % self.BOARD_SIZE] == player_color)
         self.history.append(action)
         return
-
 
     def decUnusedPlayerCount(self, player):
         self.unusedPieces[(player + 1) // 2] -= 1
@@ -400,13 +407,13 @@ class Moara(GameProtocol):
         # put piece -> remove piece
         if category == 0 or category == 1 and action != last_action:
             self.internalArray[move] = 0
-            #if it's part of a move
+            # if it's part of a move
             if last_action // self.BOARD_SIZE == 2:
                 self.internalArray[move] = player
         # put piece back
         if last_category == 2 and action != last_action:  # put own piece back
             self.internalArray[move] = player
-        if category == 3 and action != last_action: #put opponent piece back
+        if category == 3 and action != last_action:  # put opponent piece back
             self.internalArray[move] = -player
 
         self.history = self.history[:-1]
@@ -484,9 +491,9 @@ class Moara(GameProtocol):
     def terminal_value(self, to_play):
         # Game specific value - current score for the position,
         # should be called when game is already finished -1, 1, 0
-        if self.playerPieces < 3:
+        if self.playerPieces[0] < 3:
             return -1 if to_play == 0 else 1
-        if self.opponentPieces < 3 or self.getValidMoves():
+        if self.playerPieces[1] < 3 or self.getValidMoves():
             return 1 if to_play == 0 else -1
         # draw
         return 0
@@ -507,6 +514,8 @@ class ReplayBuffer(object):
     def sample_batch(self):
         # Sample uniformly across positions.
         move_sum = float(sum(len(g.history) for g in self.buffer))
+        if move_sum == 0.0:
+            return []
         games = np.random.choice(
             self.buffer,
             size=self.batch_size,
@@ -527,6 +536,7 @@ class Network(object):
 
 class NeuralNet(Network):
     def __init__(self):
+        self.lock = Lock()
         self.action_size = Moara.NUM_ACTIONS
         self.board_x = Moara.BOARD_X  # lines
         self.board_y = Moara.BOARD_Y  # columns
@@ -534,27 +544,29 @@ class NeuralNet(Network):
 
         self.input_boards = Input(shape=(self.planes, self.board_x, self.board_y))  # s: batch_size x board_x x board_y
 
-        x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, self.planes))(
+        self.x_image = BatchNormalization(axis=3)(Reshape((self.board_x, self.board_y, self.planes))(
             self.input_boards))  # batch_size  x board_x x board_y x 1
-        h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
-            x_image)))  # batch_size  x board_x x board_y x num_channels
-        h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
-            h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
-            h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='valid')(
-            h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
-        h_conv4_flat = Flatten()(h_conv4)
-        s_fc1 = Dropout(config.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat))))  # batch_size x 1024
-        s_fc2 = Dropout(config.dropout)(
-            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))  # batch_size x 1024
-        self.pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)  # batch_size x self.action_size
-        self.v = Dense(1, activation='tanh', name='v')(s_fc2)  # batch_size x 1
+        self.h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
+            self.x_image)))  # batch_size  x board_x x board_y x num_channels
+        self.h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
+            self.h_conv1)))  # batch_size  x board_x x board_y x num_channels
+        self.h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
+            self.h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        self.h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='valid')(
+            self.h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        self.h_conv4_flat = Flatten()(self.h_conv4)
+        self.s_fc1 = Dropout(config.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(self.h_conv4_flat))))  # batch_size x 1024
+        self.s_fc2 = Dropout(config.dropout)(
+            Activation('relu')(BatchNormalization(axis=1)(Dense(512)(self.s_fc1))))  # batch_size x 1024
+        self.pi = Dense(self.action_size, activation='softmax', name='pi')(self.s_fc2)  # batch_size x self.action_size
+        self.v = Dense(1, activation='tanh', name='v')(self.s_fc2)  # batch_size x 1
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
+        self.optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
+                                               config.momentum)
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], loss_weights=[1., 5.],
-                           optimizer=Adam(config.lr))
+                           optimizer=self.optimizer)
         print(self.model.summary())
 
     def inference(self, image):
@@ -570,7 +582,8 @@ class NeuralNet(Network):
         inputData = np.array(image).reshape(self.planes, self.board_x, self.board_y)
         #
         inputData = inputData[np.newaxis, :, :]
-        pi, v = self.model.predict(inputData)
+        with self.lock:
+            pi, v = self.model.predict(inputData)
         return pi[0], v[0][0]
 
     def train(self, examples):
@@ -618,41 +631,43 @@ class NeuralNet(Network):
         Saves the current neural network (with its parameters) in
         folder/filename
         """
-        filename = f"no{filename_no}.neural.data"
-        filepath = os.path.join(folder, filename)
-        if not os.path.exists(folder):
-            print("Checkpoint Directory does not exist! Making directory {}".format(folder))
-            os.mkdir(folder)
-        else:
-            print("Checkpoint Directory exists! ")
-        self.model.save_weights(filepath)
+        with self.lock:
+            filename = f"no{filename_no}.neural.data"
+            filepath = os.path.join(folder, filename)
+            if not os.path.exists(folder):
+                print("Checkpoint Directory does not exist! Making directory {}".format(folder))
+                os.mkdir(folder)
+            else:
+                print("Checkpoint Directory exists! ")
+            self.model.save_weights(filepath)
 
     def load_checkpoint(self, folder, filename_no):
         """
         Loads parameters of the neural network from folder/filename
         """
         'no37.neural.data'
-        filename = f"no{filename_no}.neural.data"
-        filepath = os.path.join(folder, filename)
-        if os.path.exists(filepath):
-            self.model.load_weights(filepath)
+        with self.lock:
+            filename = f"no{filename_no}.neural.data"
+            filepath = os.path.join(folder, filename)
+            if os.path.exists(filepath):
+                self.model.load_weights(filepath)
+            else:
+                print("No model in path '{}'".format(filepath))
+
+    def get_weights(self):
+        # Returns the weights of this network.
+        return self.model.weights
+
+    def latest_network(self):
+        # return new network
+        self.load_checkpoint(folder=config.checkpoint, filename_no=config.filename)
+
+    def save_network(self, step: int = -1):
+        if step != -1:
+            self.save_checkpoint(folder=config.checkpoint, filename_no=f"{config.filename}.{step}")
         else:
-            print("No model in path '{}'".format(filepath))
+            self.save_checkpoint(folder=config.checkpoint, filename_no=config.filename)
 
-
-class SharedStorage(object):
-
-    def __init__(self):
-        self._networks = {}
-
-    def latest_network(self) -> Network:
-        if self._networks:
-            return self._networks[max(self._networks.keys())]
-        else:
-            return make_uniform_network()  # policy -> uniform, value -> 0.5
-
-    def save_network(self, step: int, network: Network):
-        self._networks[step] = network
 
 
 ##### End Helpers ########
@@ -666,11 +681,12 @@ class SharedStorage(object):
 # Each self-play job is independent of all others; it takes the latest network
 # snapshot, produces a game and makes it available to the training job by
 # writing it to a shared replay buffer.
-def run_selfplay(storage: SharedStorage, replay_buffer: ReplayBuffer):
+def run_selfplay(replay_buffer: ReplayBuffer):
     while True:
-        network = storage.latest_network()
-        game = play_game(network)
+        globalNeuralNet.latest_network()
+        game = play_game(globalNeuralNet)
         replay_buffer.save_game(game)
+        train_network(replay_buffer)
 
 
 # Each game is produced by starting at the initial board position, then
@@ -691,7 +707,7 @@ def play_game(network: Network):
 # the search tree and traversing the tree according to the UCB formula until we
 # reach a leaf node.
 def run_mcts(game: GameProtocol, network: Network):
-    root = Node(0)
+    root = Node(0, "")
     evaluate(root, game, network)
     add_exploration_noise(root)
 
@@ -747,7 +763,7 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
     node.to_play = game.to_play()
     policy = {a: math.exp(policy_logits[a]) for a in game.legal_actions()}
     policy_sum = sum(policy.values())
-    node.children = {action: Node(p / policy_sum) for action, p in policy.items()}
+    node.children = {action: Node(p / policy_sum, f"{node.description}.{action}") for action, p in policy.items()}
     return value
 
 
@@ -756,6 +772,9 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
 def backpropagate(search_path: List[Node], value: float, to_play):
     for node in search_path:
         node.visit_count += 1
+        #from -1 to +1
+        # node.value_sum += value if node.to_play == to_play else -value
+        #from 0 to 1
         node.value_sum += value if node.to_play == to_play else (1 - value)
 
 
@@ -778,17 +797,17 @@ def add_exploration_noise(node: Node):
 ####### Part 2: Training #########
 
 
-def train_network(storage: SharedStorage,
-                  replay_buffer: ReplayBuffer):
-    network = Network()
-    optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
-                                           config.momentum)
+def train_network(replay_buffer: ReplayBuffer):
+    globalNeuralNet.latest_network()
     for i in range(config.training_steps):
         if i % config.checkpoint_interval == 0:
-            storage.save_network(i, network)
+            globalNeuralNet.save_network(i)
         batch = replay_buffer.sample_batch()
-        update_weights(optimizer, network, batch, config.weight_decay)
-    storage.save_network(config.training_steps, network)
+        while batch == []:
+            time.sleep(60)
+        if batch != []:
+            globalNeuralNet.train(batch)
+            globalNeuralNet.save_network()
 
 
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
@@ -825,15 +844,10 @@ def softmax_sample(d):
 
 
 def launch_job(f, *args):
-    # f(*args)
-    thread = Thread(target=f, args=args)
-    thread.start()
+    f(*args)
+    # thread = Thread(target=f, args=args)
+    # thread.start()
     # thread.join()
-
-
-def make_uniform_network():
-    # return new network
-    return NeuralNet()
 
 
 # AlphaZero training is split into two independent parts: Network training and
@@ -842,19 +856,17 @@ def make_uniform_network():
 # from the training to the self-play, and the finished games from the self-play
 # to the training.
 def alphazero():
-    storage = SharedStorage()
     replay_buffer = ReplayBuffer()
 
     for i in range(config.num_actors):
-        launch_job(run_selfplay, storage, replay_buffer)
+        launch_job(run_selfplay, replay_buffer)
 
-    train_network(storage, replay_buffer)
+    # train_network(replay_buffer)
 
-    return storage.latest_network()
 
 
 # moaraGame = Moara()
-# globalNeuralNet = NeuralNet(moaraGame, mcts2.moara.args)
+globalNeuralNet = NeuralNet()
 # n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
 config: AlphaZeroConfig = AlphaZeroConfig()
 alphazero()
