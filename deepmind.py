@@ -48,6 +48,7 @@ class AlphaZeroConfig(object):
         self.checkpoint_interval = int(1e3)
         self.window_size = int(1e6)
         self.batch_size = 4096
+        self.epochs = 20,
 
         self.weight_decay = 1e-4
         self.momentum = 0.9
@@ -597,8 +598,8 @@ class NeuralNet(Network):
                       the given board, and v is its value. The examples has
                       board in its canonical form.
         """
-
-        input_boards, target_pis, target_vs = list(zip(*examples))
+        input_boards, targets = list(zip(*examples))
+        target_vs, target_pis = list(zip(*targets))
         input_boards = np.array(input_boards).reshape(len(input_boards), self.planes, self.board_x, self.board_y)
 
         print("mumu")
@@ -606,8 +607,8 @@ class NeuralNet(Network):
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
-        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.args.batch_size,
-                                epochs=self.args.epochs, validation_split=0.1)
+        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=config.batch_size,
+                                epochs=config.epochs, validation_split=0.1)
         # for key in result.history.keys():
         #     print(key)
         #     print(result.history[key])
