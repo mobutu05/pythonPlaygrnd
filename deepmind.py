@@ -17,16 +17,18 @@ import moara
 import os
 import copy
 from threading import Thread, Lock
-#returns all moves possible from a board configuration
+
+# returns all moves possible from a board configuration
 ValidMovesFromState = {}
 
-#profiling
+# profiling
 generate_state_from_history_counter = 0
 getValidMoves_counter = 0
 apply_counter = 0
 do_action_counter = 0
 make_image_counter = 0
 undo_action_counter = 0
+
 
 ##########################
 ####### Helpers ##########
@@ -144,15 +146,18 @@ class GameProtocol(object):
         return (self.terminal_value(state_index % 2),
                 self.child_visits[state_index])
 
+    @property
     def to_play(self):
-        return (len(self.history) - 1) % 2
+        return len(self.history) % 2
 
 
 # the input data for the neural network from the move number of the current game
-#key-value:
-#key - history
-#image list generated for a game with that history
+# key-value:
+# key - history
+# image list generated for a game with that history
 TrainImages = {}
+
+
 class Moara(GameProtocol):
     VALID_MOVES = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.VALID_MOVES]
     MILLS = [list(map(lambda x: mcts2.Moara.VALID_POSITIONS.index(x), y)) for y in mcts2.Moara.MILLS]
@@ -176,13 +181,14 @@ class Moara(GameProtocol):
     planes = (NUM_STEPS * NUM_FEATURES +
               # 1 +  # no of repetitions for current board, uniform value over array
               1)  # total moves, uniform value over array
-    #indexes into internal state for various information
+    # indexes into internal state for various information
     UNUSED_PIECES_INDEX = BOARD_SIZE
     PLAYER_PIECES_INDEX = UNUSED_PIECES_INDEX + 2
     NO_MOVES_WITHOUT_CAPTURE_INDEX = PLAYER_PIECES_INDEX + 2
     NO_MOVES_INDEX = NO_MOVES_WITHOUT_CAPTURE_INDEX + 1
     LAST_LAST_ACTION_INDEX = NO_MOVES_INDEX + 1
     LAST_ACTION_INDEX = LAST_LAST_ACTION_INDEX + 1
+
     def __init__(self, history=None):
         super().__init__(history)
         if self.history == []:
@@ -201,25 +207,73 @@ class Moara(GameProtocol):
         # self.noMovesWithoutCapture = 0
         # self.noMoves = 0
 
-
         # using current history, generate various states
         # for index, action in enumerate(self.history):
         #     self.do_action(action, index)
         # self.generate_state_from_history()
 
+    def stateToString(state):
+        _board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in state[:Moara.BOARD_SIZE]])
+        _player = 'x' if state[Moara.NO_MOVES_INDEX] % 2 == 0 else 'o'
+        # moves = functools.reduce(lambda acc, i: f"{acc}.{i}", self.history, "")
+        _last_action = state[Moara.LAST_ACTION_INDEX]
+        _last_last_action = state[Moara.LAST_LAST_ACTION_INDEX]
+        return f"{_board}{state[Moara.UNUSED_PIECES_INDEX]}{state[Moara.UNUSED_PIECES_INDEX + 1]}{_player} [{_last_last_action}:{_last_action}]"
+
     # string representation of the current position in the game
     def __repr__(self):
-        _board = ''.join(['x' if x == 1 else 'o' if x == -1 else '_' for x in self.history[-1][:self.BOARD_SIZE]])
-        _player = 'x' if self.to_play() == 0 else 'o'
-        # moves = functools.reduce(lambda acc, i: f"{acc}.{i}", self.history, "")
-        _last_action = self.history[-1][self.LAST_ACTION_INDEX]
-        _last_last_action = self.history[-1][self.LAST_LAST_ACTION_INDEX]
-        return f"{_board}{self.unusedPieces()[0]}{self.unusedPieces()[1]}{_player} [{_last_last_action}:{_last_action}]"
+        return Moara.stateToString(self.history[-1])
 
     def clone(self):
         return Moara(list(self.history))
 
+    @property
+    def to_play(self):
+        return self.history[-1][self.NO_MOVES_INDEX] % 2
 
+    @property
+    def internalState(self):
+        return self.history[-1]
+
+    @property
+    def unusedPieces(self):
+        return self.history[-1][self.UNUSED_PIECES_INDEX:self.UNUSED_PIECES_INDEX + 2]
+
+    @property
+    def playerPieces(self):
+        return self.history[-1][self.PLAYER_PIECES_INDEX:self.PLAYER_PIECES_INDEX + 2]
+
+    @property
+    def noMovesWithoutCapture(self):
+        return self.history[-1][self.NO_MOVES_WITHOUT_CAPTURE_INDEX]
+
+    @noMovesWithoutCapture.setter
+    def noMovesWithoutCapture(self, value):
+        self.history[-1][self.NO_MOVES_WITHOUT_CAPTURE_INDEX] = value
+
+    @property
+    def noMoves(self):
+        return self.history[-1][self.NO_MOVES_INDEX]
+
+    @noMoves.setter
+    def noMoves(self, value):
+        self.history[-1][self.NO_MOVES_INDEX] = value
+
+    @property
+    def last_action(self):
+        return self.history[-1][self.LAST_ACTION_INDEX]
+
+    @last_action.setter
+    def last_action(self, value):
+        self.history[-1][self.LAST_LAST_ACTION_INDEX] = self.history[-1][self.LAST_ACTION_INDEX]
+        self.history[-1][self.LAST_ACTION_INDEX] = value
+
+    @property
+    def last_last_action(self):
+        return self.history[-1][self.LAST_LAST_ACTION_INDEX]
+
+    def decUnusedPlayerCount(self, player):
+        self.unusedPieces[(player + 1) // 2] -= 1
 
     def generate_state_from_history(self):
         return
@@ -242,7 +296,7 @@ class Moara(GameProtocol):
             list_of_captures) > 0 else len(self.history)
         end = time.clock()
         global generate_state_from_history_counter
-        generate_state_from_history_counter += (end-start)
+        generate_state_from_history_counter += (end - start)
 
     def getValidMoves(self):
         global getValidMoves_counter
@@ -253,26 +307,24 @@ class Moara(GameProtocol):
             # if s not in invariantBoard.history or invariantBoard.history[s] < 2:
             result = ValidMovesFromState[s]
             end = time.clock()
-            getValidMoves_counter += (end-start)
+            getValidMoves_counter += (end - start)
             return result
             # else:
         result_1 = []
         result = []
-        last_action = self.history[-1][self.LAST_ACTION_INDEX]
-        last_last_action = self.history[-1][self.LAST_LAST_ACTION_INDEX]
-        need_to_pass = last_action >= self.BOARD_SIZE and last_action < self.BOARD_SIZE * 3 and last_last_action != last_action
+        need_to_pass = self.BOARD_SIZE <= self.last_action < self.BOARD_SIZE * 3 and self.last_last_action != self.last_action
         if need_to_pass:
             end = time.clock()
             getValidMoves_counter += (end - start)
-            return [last_action]
-        need_to_select_move = last_action >= self.BOARD_SIZE * 2 and last_action < self.BOARD_SIZE * 3 and last_action == last_last_action
-        need_to_finish_capture = last_action >= self.BOARD_SIZE * 1 and last_action < self.BOARD_SIZE * 2 and last_action == last_last_action
-        need_to_put = not need_to_finish_capture and self.unusedPieces()[self.to_play()] > 0
-        player_color = 1 if self.to_play() == 0 else -1
+            return [self.last_action]
+        need_to_select_move = self.BOARD_SIZE * 2 <= self.last_action < self.BOARD_SIZE * 3 and self.last_action == self.last_last_action
+        need_to_finish_capture = self.BOARD_SIZE * 1 <= self.last_action < self.BOARD_SIZE * 2 and self.last_action == self.last_last_action
+        need_to_put = not need_to_finish_capture and self.unusedPieces[self.to_play] > 0
+        player_color = 1 if self.to_play == 0 else -1
 
         if need_to_put:  # put
             # phase 1: can put anywhere where there is an empty place
-            result_1 = [x for x in range(self.BOARD_SIZE) if self.history[-1][x] == 0]
+            result_1 = [x for x in range(self.BOARD_SIZE) if self.internalState[x] == 0]
         elif need_to_finish_capture:
             # select an opponent not in a mill
             all_opponent_pieces = [x for x in range(self.BOARD_SIZE) if self.internalState[x] == -player_color]
@@ -288,8 +340,8 @@ class Moara(GameProtocol):
             result = [x + self.BOARD_SIZE * 3 for x in available_opponent_pieces]
         elif need_to_select_move:
             # select moves that start from the position and are empty
-            if self.playerPieces[self.to_play()] > 3:
-                valid_moves = list(filter(lambda x: x[0] == last_action % self.BOARD_SIZE, self.VALID_MOVES))
+            if self.playerPieces[self.to_play] > 3:
+                valid_moves = list(filter(lambda x: x[0] == self.last_action % self.BOARD_SIZE, self.VALID_MOVES))
                 # transform into index in action moves
                 result_1 = [v_m for v_m in set([x[1] for x in valid_moves]) if self.internalState[v_m] == 0]
             else:
@@ -297,7 +349,7 @@ class Moara(GameProtocol):
                 result_1 = [x for x in range(self.BOARD_SIZE) if self.internalState[x] == 0]
         else:
             # move - select all positions from which a move can be started
-            if self.playerPieces[self.to_play()] > 3:  # move
+            if self.playerPieces[self.to_play] > 3:  # move
                 valid_moves = list(
                     filter(lambda x: self.internalState[x[0]] == player_color and self.internalState[x[1]] == 0,
                            self.VALID_MOVES))
@@ -314,7 +366,7 @@ class Moara(GameProtocol):
             mills = self.getMills(possible_action)  # any pos is in two mills
             wouldBeInMill = False
             for mill in mills:
-                copy_of_internal_array = np.array(self.history[-1])
+                copy_of_internal_array = np.array(self.internalState)
                 copy_of_internal_array[possible_action] = player_color
                 # if orig != -1:
                 #     copy_of_internal_array[orig] = 0
@@ -343,13 +395,12 @@ class Moara(GameProtocol):
         start = time.clock()
         category = action // self.BOARD_SIZE
         move = action % self.BOARD_SIZE
-        player_color = 1 if self.to_play() == 0 else -1
-        last_action = self.history[-1] if self.noMoves > 0 else -1
-        last_last_action = self.history[-2] if self.noMoves > 1 else -1
+        self.history.append(np.array(self.history[-1]))
+        player_color = 1 if self.to_play == 0 else -1
 
         if category == 0:
-            if last_action != -1 and last_action == last_last_action:  # part 2 of a move
-                origin = last_action % self.BOARD_SIZE
+            if self.last_action != -1 and self.last_action == self.last_last_action:  # part 2 of a move
+                origin = self.last_action % self.BOARD_SIZE
                 if self.internalState[origin] != player_color:
                     NOP = 0
                 assert (self.internalState[origin] == player_color)
@@ -361,16 +412,14 @@ class Moara(GameProtocol):
             else:  # put a piece from unused
                 assert (self.internalState[move] == 0)
                 self.internalState[move] = player_color
-                self.unusedPieces[self.to_play()] -= 1
-                self.noMoves += 1
+                self.unusedPieces[self.to_play] -= 1
                 self.noMovesWithoutCapture += 1
         elif category == 1:
-            if last_action == action:
+            if self.last_action == action:
                 # the move is for the opponent, pass
-                self.noMoves += 1
                 self.noMovesWithoutCapture += 1
-            elif last_action == last_last_action:  # move & prepare capture
-                origin = last_action % self.BOARD_SIZE
+            elif self.last_action == self.last_last_action:  # move & prepare capture
+                origin = self.last_action % self.BOARD_SIZE
                 assert (self.internalState[origin] == player_color)
                 assert (self.internalState[move] == 0)
                 self.internalState[origin] = 0
@@ -379,48 +428,27 @@ class Moara(GameProtocol):
                 # put the piece, and an opponent pieces will be selected for removal
                 assert (self.internalState[move] == 0)
                 self.internalState[move] = player_color
-                self.unusedPieces[self.to_play()] -= 1
-                self.noMoves += 1
+                self.unusedPieces[self.to_play] -= 1
                 self.noMovesWithoutCapture += 1
         elif category == 3:
             # eliminate a piece
             assert (self.internalState[move] == -player_color)
             self.internalState[move] = 0
-            self.noMoves += 1
             self.noMovesWithoutCapture = 0  # reset it
-            self.playerPieces[0 if self.to_play() == 1 else 1] -= 1
+            self.playerPieces[0 if self.to_play == 1 else 1] -= 1
         else:  # prepare move to destination
-            if last_action == action:
+            if self.last_action == action:
                 # the move is for the opponent, pass
-                self.noMoves += 1
                 self.noMovesWithoutCapture += 1
             else:  # move for player, step 1, do nothing
-                self.noMoves += 1
-                self.noMovesWithoutCapture = 0  # reset it
+                self.noMovesWithoutCapture += 1
                 assert (self.internalState[action % self.BOARD_SIZE] == player_color)
-        self.history.append(action)
+        # self.history.append(action)
+        self.noMoves += 1
+        self.last_action = action
         end = time.clock()
         apply_counter += (end - start)
         return
-
-    def noMoves(self):
-        result = self.history[-1][self.NO_MOVES_INDEX]
-        return result
-
-    def noMovesWithoutCapture(self):
-        result = self.history[-1][self.NO_MOVES_WITHOUT_CAPTURE_INDEX]
-        return result
-
-    def playerPieces(self):
-        result = self.history[-1][self.PLAYER_PIECES_INDEX:self.PLAYER_PIECES_INDEX + 2]
-        return result
-
-    def unusedPieces(self):
-        result = self.history[-1][self.UNUSED_PIECES_INDEX:self.UNUSED_PIECES_INDEX + 2]
-        return result
-
-    def decUnusedPlayerCount(self, player):
-        self.unusedPieces[(player + 1) // 2] -= 1
 
     def isInAMill(self, pos, player):
         # find all mills that contain the pos
@@ -460,8 +488,7 @@ class Moara(GameProtocol):
             if action != last_action:
                 self.internalState[move] = 0
         end = time.clock()
-        do_action_counter +=  (end-start)
-
+        do_action_counter += (end - start)
 
     def undo_action(self, action):
         global undo_action_counter
@@ -488,18 +515,22 @@ class Moara(GameProtocol):
         end = time.clock()
         undo_action_counter += (end - start)
 
-
     def make_image(self, state_index: int):
         global make_image_counter
         start = time.clock()
         result = []
         if state_index != -1:
-            if self.history[: min(state_index, len(self.history))] in TrainImages:
-                result = TrainImages[self.history[: min(state_index, len(self.history))]]
+            s = Moara.stateToString(self.history[state_index])
+            if s in TrainImages:
+                result = TrainImages[s]
+                end = time.clock()
+                make_image_counter += (end - start)
                 return result
         else:
-            if self.history in TrainImages:
-                result = TrainImages[self.history]
+            if str(self) in TrainImages:
+                result = TrainImages[str(self)]
+                end = time.clock()
+                make_image_counter += (end - start)
                 return result
 
         # Game specific feature planes.
@@ -514,7 +545,7 @@ class Moara(GameProtocol):
         # propagate back in temporal array
         for i in range(self.NUM_STEPS):  # i = 0, is the oldest
             # use historical moves, extract from history, if enough moves where made
-            if len(local) - 1 < i:
+            if local[-1][self.NO_MOVES_INDEX] < i:
                 result += [[0] * self.BOARD_SIZE for _ in range(self.NUM_FEATURES)]
             else:
                 if i > 0:
@@ -542,7 +573,7 @@ class Moara(GameProtocol):
                 result.append([local[-1][self.UNUSED_PIECES_INDEX + 1]] * self.BOARD_SIZE)
 
                 # player at move
-                result.append([(len(self.history) - 1) % 2] * self.BOARD_SIZE)
+                result.append([local[-1][self.NO_MOVES_INDEX] % 2] * self.BOARD_SIZE)
 
         # # repetition
         # s = str(self)
@@ -553,18 +584,18 @@ class Moara(GameProtocol):
         # total moves without capture
         result.append([noMovesWithoutCapture] * self.BOARD_SIZE)
 
-        TrainImages[self.history[-1]] = result
-        end=time.clock()
+        TrainImages[str(self)] = result
+        end = time.clock()
         make_image_counter += (end - start)
         return result
 
     def terminal(self):
         # Game specific termination rules.
-        if self.noMovesWithoutCapture() > 100:
+        if self.noMovesWithoutCapture > 100:
             return True
-        if self.playerPieces()[0] < 3:
+        if self.playerPieces[0] < 3:
             return True
-        if self.playerPieces()[1] < 3:
+        if self.playerPieces[1] < 3:
             return True
         if not self.getValidMoves():
             # self.display()
@@ -596,15 +627,15 @@ class ReplayBuffer(object):
 
     def sample_batch(self):
         # Sample uniformly across positions.
-        move_sum = float(sum(len(g.history) for g in self.buffer))
+        move_sum = float(sum(len(g.history)-1 for g in self.buffer))
         if move_sum == 0.0:
             return []
         games = np.random.choice(
             self.buffer,
             size=self.batch_size,
-            p=[len(g.history) / move_sum for g in self.buffer])
-        game_pos = [(g, np.random.randint(len(g.history))) for g in games]
-        return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos]
+            p=[(len(g.history) - 1)/ move_sum for g in self.buffer])
+        game_pos = [(g, np.random.randint(len(g.history)-1)) for g in games]
+        return [(g.make_image(i+1), g.make_target(i)) for (g, i) in game_pos]
 
 
 class Network(object):
@@ -647,7 +678,7 @@ class NeuralNet(Network):
 
         self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
         self.optimizer = tf.train.MomentumOptimizer(0.2,
-                                               config.momentum)
+                                                    config.momentum)
         self.model.compile(loss=['categorical_crossentropy', 'mean_squared_error'], loss_weights=[1., 5.],
                            optimizer=self.optimizer)
         print(self.model.summary())
@@ -752,7 +783,6 @@ class NeuralNet(Network):
             self.save_checkpoint(folder=config.checkpoint, filename_no=config.filename)
 
 
-
 ##### End Helpers ########
 ##########################
 
@@ -777,7 +807,7 @@ def run_selfplay(replay_buffer: ReplayBuffer):
 # of the game is reached.
 def play_game(network: Network):
     game = Moara()
-    while not game.terminal() and game.noMoves() < config.max_moves:
+    while not game.terminal() and game.noMoves < config.max_moves:
         action, root = run_mcts(game, network)
         game.apply(action)
         print(f"{len(game.history):03d} {game.playerPieces[0]}:{game.playerPieces[1]} {root.value():0.2f} {game}")
@@ -805,7 +835,7 @@ def run_mcts(game: GameProtocol, network: Network):
             search_path.append(node)
 
         value = evaluate(node, scratch_game, network)
-        backpropagate(search_path, value, scratch_game.to_play())
+        backpropagate(search_path, value, scratch_game.to_play)
     return select_action(game, root), root
 
 
@@ -843,7 +873,7 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
     policy_logits, value = network.inference(game.make_image(-1))
 
     # Expand the node.
-    node.to_play = game.to_play()
+    node.to_play = game.to_play
     policy = {a: math.exp(policy_logits[a]) for a in game.legal_actions()}
     policy_sum = sum(policy.values())
     node.children = {action: Node(p / policy_sum, f"{node.description}.{action}") for action, p in policy.items()}
@@ -855,9 +885,9 @@ def evaluate(node: Node, game: GameProtocol, network: Network):
 def backpropagate(search_path: List[Node], value: float, to_play):
     for node in search_path:
         node.visit_count += 1
-        #from -1 to +1
+        # from -1 to +1
         # node.value_sum += value if node.to_play == to_play else -value
-        #from 0 to 1
+        # from 0 to 1
         node.value_sum += value if node.to_play == to_play else (1 - value)
 
 
@@ -945,7 +975,6 @@ def alphazero():
         launch_job(run_selfplay, replay_buffer)
 
     # train_network(replay_buffer)
-
 
 
 # moaraGame = Moara()
