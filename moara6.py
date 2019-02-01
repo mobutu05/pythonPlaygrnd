@@ -5,9 +5,9 @@ import pickle
 from collections import deque
 
 import numpy as np
-from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense
-from tensorflow.keras.optimizers import Adam
+from keras import Input, Model
+from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense
+from keras.optimizers import Adam
 from numpy.random.mtrand import shuffle
 
 import mcts2

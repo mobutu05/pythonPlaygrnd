@@ -57,7 +57,7 @@ class AlphaZeroConfig(object):
         self.checkpoint_interval = int(1e3)
         self.window_size = int(1e6)
         self.batch_size = 4096
-        self.epochs = 20
+        self.epochs = 3
 
         self.weight_decay = 1e-4
         self.momentum = 0.9
@@ -720,7 +720,7 @@ class NeuralNet(Network):
         input_boards = np.asarray(input_boards)
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
-        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=config.batch_size,
+        result = self.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=1024,
                                 epochs=config.epochs, validation_split=0.1)
         # for key in result.history.keys():
         #     print(key)
