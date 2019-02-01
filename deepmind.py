@@ -53,7 +53,7 @@ class AlphaZeroConfig(object):
         self.pb_c_init = 1.25
 
         ### Training
-        self.training_steps = int(700e3)
+        self.training_steps = 1 #int(700e3)
         self.checkpoint_interval = int(1e3)
         self.window_size = int(1e6)
         self.batch_size = 4096
@@ -911,8 +911,10 @@ def add_exploration_noise(node: Node):
 
 
 def train_network(replay_buffer: ReplayBuffer):
+    # old_train_network(replay_buffer)
     globalNeuralNet.latest_network()
     for i in range(config.training_steps):
+        print(f"training step {i} out of {config.training_steps}")
         if i % config.checkpoint_interval == 0:
             globalNeuralNet.save_network(i)
         batch = replay_buffer.sample_batch()
@@ -922,16 +924,30 @@ def train_network(replay_buffer: ReplayBuffer):
             globalNeuralNet.train(batch)
             globalNeuralNet.save_network()
 
+def old_train_network(replay_buffer: ReplayBuffer):
+  # network = Network()
+  optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
+                                         config.momentum)
+  for i in range(config.training_steps):
+    if i % config.checkpoint_interval == 0:
+        globalNeuralNet.save_network(i)
+    batch = replay_buffer.sample_batch()
+    update_weights(optimizer, globalNeuralNet, batch, config.weight_decay)
+    globalNeuralNet.save_network()
+
 
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
                    weight_decay: float):
     loss = 0
+    loop = 0
     for image, (target_value, target_policy) in batch:
-        value, policy_logits = network.inference(image)
-        loss += (
-                tf.losses.mean_squared_error(value, target_value) +
-                tf.nn.softmax_cross_entropy_with_logits(
-                    logits=policy_logits, labels=target_policy))
+        print(f"loop {loop}")
+        loop += 1
+        policy_logits, value  = network.inference(image)
+        loss_v = tf.losses.mean_squared_error(value, target_value)
+        loss_p = tf.nn.softmax_cross_entropy_with_logits(
+                    logits=policy_logits, labels=target_policy)
+        loss += (loss_v + loss_p)
 
     for weights in network.get_weights():
         loss += weight_decay * tf.nn.l2_loss(weights)
