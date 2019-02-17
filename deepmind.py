@@ -1,6 +1,6 @@
 """Pseudocode description of the AlphaZero algorithm."""
 
-from __future__ import division
+# from __future__ import division
 
 import functools
 import math
