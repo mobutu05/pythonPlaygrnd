@@ -9,7 +9,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from keras import Input, Model
-from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense
+from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense, MaxPooling2D
 from keras.optimizers import Adam
 from typing import List
 import mcts2
@@ -74,7 +74,7 @@ class AlphaZeroConfig(object):
         self.lr = 0.001
 
         self.checkpoint = './temp/'
-        self.filename = 'Deepmind'
+        self.filename = 'Deepmind2'
 
 
 config: AlphaZeroConfig = AlphaZeroConfig()
@@ -237,40 +237,40 @@ class Moara(GameProtocol):
 
     @property
     def unusedPieces(self):
-        return self.history[-1][self.UNUSED_PIECES_INDEX:self.UNUSED_PIECES_INDEX + 2]
+        return self.internalState[self.UNUSED_PIECES_INDEX:self.UNUSED_PIECES_INDEX + 2]
 
     @property
     def playerPieces(self):
-        return self.history[-1][self.PLAYER_PIECES_INDEX:self.PLAYER_PIECES_INDEX + 2]
+        return self.internalState[self.PLAYER_PIECES_INDEX:self.PLAYER_PIECES_INDEX + 2]
 
     @property
     def noMovesWithoutCapture(self):
-        return self.history[-1][self.NO_MOVES_WITHOUT_CAPTURE_INDEX]
+        return self.internalState[self.NO_MOVES_WITHOUT_CAPTURE_INDEX]
 
     @noMovesWithoutCapture.setter
     def noMovesWithoutCapture(self, value):
-        self.history[-1][self.NO_MOVES_WITHOUT_CAPTURE_INDEX] = value
+        self.internalState[self.NO_MOVES_WITHOUT_CAPTURE_INDEX] = value
 
     @property
     def noMoves(self):
-        return self.history[-1][self.NO_MOVES_INDEX]
+        return self.internalState[self.NO_MOVES_INDEX]
 
     @noMoves.setter
     def noMoves(self, value):
-        self.history[-1][self.NO_MOVES_INDEX] = value
+        self.internalState[self.NO_MOVES_INDEX] = value
 
     @property
     def last_action(self):
-        return self.history[-1][self.LAST_ACTION_INDEX]
+        return self.internalState[self.LAST_ACTION_INDEX]
 
     @last_action.setter
     def last_action(self, value):
-        self.history[-1][self.LAST_LAST_ACTION_INDEX] = self.history[-1][self.LAST_ACTION_INDEX]
-        self.history[-1][self.LAST_ACTION_INDEX] = value
+        self.internalState[self.LAST_LAST_ACTION_INDEX] = self.history[-1][self.LAST_ACTION_INDEX]
+        self.internalState[self.LAST_ACTION_INDEX] = value
 
     @property
     def last_last_action(self):
-        return self.history[-1][self.LAST_LAST_ACTION_INDEX]
+        return self.internalState[self.LAST_LAST_ACTION_INDEX]
 
     def decUnusedPlayerCount(self, player):
         self.unusedPieces[(player + 1) // 2] -= 1
@@ -366,15 +366,15 @@ class Moara(GameProtocol):
             mills = self.getMills(possible_action)  # any pos is in two mills
             wouldBeInMill = False
             for mill in mills:
-                copy_of_internal_array = np.array(self.internalState)
-                copy_of_internal_array[possible_action] = player_color
+                # copy_of_internal_array = np.array(self.internalState)
+                # copy_of_internal_array[possible_action] = player_color
                 # if orig != -1:
                 #     copy_of_internal_array[orig] = 0
                 sum_mill = copy_of_internal_array[mill[0]] + \
                            copy_of_internal_array[mill[1]] + \
                            copy_of_internal_array[mill[2]]
-
-                if sum_mill == 3 * player_color:
+                sum_mill = self.internalState[mill[0]] + self.internalState[mill[1]] + self.internalState[mill[2]]
+                if player_color +  sum_mill == 3 * player_color:
                     wouldBeInMill = True
                     break
 
@@ -662,13 +662,14 @@ class NeuralNet(Network):
             self.input_boards))  # batch_size  x board_x x board_y x 1
         self.h_conv1 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
             self.x_image)))  # batch_size  x board_x x board_y x num_channels
+        self.pool = MaxPooling2D()(self.h_conv1)
         self.h_conv2 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
-            self.h_conv1)))  # batch_size  x board_x x board_y x num_channels
-        self.h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
-            self.h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
-        self.h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='valid')(
-            self.h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
-        self.h_conv4_flat = Flatten()(self.h_conv4)
+            self.pool)))  # batch_size  x board_x x board_y x num_channels
+        # self.h_conv3 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='same')(
+        #     self.h_conv2)))  # batch_size  x (board_x) x (board_y) x num_channels
+        # self.h_conv4 = Activation('relu')(BatchNormalization(axis=3)(Conv2D(config.num_channels, 3, padding='valid')(
+        #     self.h_conv3)))  # batch_size  x (board_x-2) x (board_y-2) x num_channels
+        self.h_conv4_flat = Flatten()(self.h_conv2)
         self.s_fc1 = Dropout(config.dropout)(
             Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(self.h_conv4_flat))))  # batch_size x 1024
         self.s_fc2 = Dropout(config.dropout)(
