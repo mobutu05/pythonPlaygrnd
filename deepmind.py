@@ -53,7 +53,7 @@ class AlphaZeroConfig(object):
         self.pb_c_init = 1.25
 
         ### Training
-        self.training_steps = 1 #int(700e3)
+        self.training_steps = int(700e3)
         self.checkpoint_interval = int(1e3)
         self.window_size = int(1e6)
         self.batch_size = 4096
@@ -370,9 +370,9 @@ class Moara(GameProtocol):
                 # copy_of_internal_array[possible_action] = player_color
                 # if orig != -1:
                 #     copy_of_internal_array[orig] = 0
-                sum_mill = copy_of_internal_array[mill[0]] + \
-                           copy_of_internal_array[mill[1]] + \
-                           copy_of_internal_array[mill[2]]
+                # sum_mill = copy_of_internal_array[mill[0]] + \
+                #            copy_of_internal_array[mill[1]] + \
+                #            copy_of_internal_array[mill[2]]
                 sum_mill = self.internalState[mill[0]] + self.internalState[mill[1]] + self.internalState[mill[2]]
                 if player_color +  sum_mill == 3 * player_color:
                     wouldBeInMill = True
@@ -991,7 +991,7 @@ def alphazero():
     for i in range(config.num_actors):
         launch_job(run_selfplay, replay_buffer)
 
-    # train_network(replay_buffer)
+    train_network(replay_buffer)
 
 
 # moaraGame = Moara()
