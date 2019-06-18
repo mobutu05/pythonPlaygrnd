@@ -2,21 +2,18 @@
 
 # from __future__ import division
 
-import functools
 import math
+import os
 import time
+from threading import Lock
+from typing import List
 
 import numpy as np
 import tensorflow as tf
 from keras import Input, Model
 from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense, MaxPooling2D
-from keras.optimizers import Adam
-from typing import List
+
 import mcts2
-import moara
-import os
-import copy
-from threading import Thread, Lock
 
 # returns all moves possible from a board configuration
 ValidMovesFromState = {}
