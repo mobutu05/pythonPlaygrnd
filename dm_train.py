@@ -33,10 +33,10 @@ def train_network(replay_buffer: ReplayBuffer):
             replay_buffer.reload()
             batch = replay_buffer.sample_batch()
 
-        update_weights(optimizer, nn, batch, config.weight_decay)
+        # update_weights(optimizer, nn, batch, config.weight_decay)
+        nn.train(batch)
         if i % config.checkpoint_interval == 0:
-            nn.save_network(i)
-
+            nn.save_network()
 
 
 # n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)

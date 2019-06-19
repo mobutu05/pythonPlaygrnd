@@ -640,6 +640,7 @@ class ReplayBuffer(object):
             print("File with trainExamples found. Read it.")
             with open(modelFile, "rb") as f:
                 self.buffer = pickle.Unpickler(f).load()
+            print(f"Found {len(self.buffer)} games")
             f.closed
 
 
