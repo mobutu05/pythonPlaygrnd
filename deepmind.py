@@ -12,7 +12,7 @@ import numpy as np
 import tensorflow as tf
 from keras import Input, Model
 from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense, MaxPooling2D
-
+import pickle
 import mcts2
 
 # returns all moves possible from a board configuration
@@ -72,6 +72,7 @@ class AlphaZeroConfig(object):
 
         self.checkpoint = './temp/'
         self.filename = 'Deepmind2'
+        self.replaybuffer = 'replay'
 
 
 config: AlphaZeroConfig = AlphaZeroConfig()
@@ -622,6 +623,26 @@ class ReplayBuffer(object):
             self.buffer.pop(0)
         self.buffer.append(game)
 
+        folder = config.checkpoint
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        filename = os.path.join(folder, config.replaybuffer + ".data")
+        with open(filename, "wb+") as f:
+            pickle.Pickler(f).dump(self.buffer)
+        f.closed
+
+    def reload(self):
+        modelFile = os.path.join(config.checkpoint, config.replaybuffer + ".data")
+        if not os.path.isfile(modelFile):
+            print(modelFile)
+            print("File with trainExamples not found.")
+        else:
+            print("File with trainExamples found. Read it.")
+            with open(modelFile, "rb") as f:
+                self.buffer = pickle.Unpickler(f).load()
+            f.closed
+
+
     def sample_batch(self):
         # Sample uniformly across positions.
         move_sum = float(sum(len(g.history)-1 for g in self.buffer))
@@ -793,11 +814,12 @@ class NeuralNet(Network):
 # snapshot, produces a game and makes it available to the training job by
 # writing it to a shared replay buffer.
 def run_selfplay(replay_buffer: ReplayBuffer):
+    nn = NeuralNet()
     while True:
-        globalNeuralNet.latest_network()
-        game = play_game(globalNeuralNet)
+        nn.latest_network()
+        game = play_game(nn)
         replay_buffer.save_game(game)
-        train_network(replay_buffer)
+        # train_network(replay_buffer)
 
 
 # Each game is produced by starting at the initial board position, then
@@ -990,9 +1012,8 @@ def alphazero():
 
     train_network(replay_buffer)
 
-
-# moaraGame = Moara()
-globalNeuralNet = NeuralNet()
-# n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
-config: AlphaZeroConfig = AlphaZeroConfig()
-alphazero()
+if __name__ == "__main__":
+    # moaraGame = Moara()
+    # n.load_checkpoint(folder=moara.args.checkpoint, filename_no=moara.args.filename)
+    config: AlphaZeroConfig = AlphaZeroConfig()
+    alphazero()
