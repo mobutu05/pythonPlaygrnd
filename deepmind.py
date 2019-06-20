@@ -372,7 +372,7 @@ class Moara(GameProtocol):
                 #            copy_of_internal_array[mill[1]] + \
                 #            copy_of_internal_array[mill[2]]
                 sum_mill = self.internalState[mill[0]] + self.internalState[mill[1]] + self.internalState[mill[2]]
-                if player_color +  sum_mill == 3 * player_color:
+                if player_color + sum_mill == 3 * player_color:
                     wouldBeInMill = True
                     break
 
@@ -638,23 +638,25 @@ class ReplayBuffer(object):
             print("File with trainExamples not found.")
         else:
             print("File with trainExamples found. Read it.")
-            with open(modelFile, "rb") as f:
-                self.buffer = pickle.Unpickler(f).load()
+            try:
+                with open(modelFile, "rb") as f:
+                    self.buffer = pickle.Unpickler(f).load()
+            except:
+                pass
             print(f"Found {len(self.buffer)} games")
             f.closed
 
-
     def sample_batch(self):
         # Sample uniformly across positions.
-        move_sum = float(sum(len(g.history)-1 for g in self.buffer))
+        move_sum = float(sum(len(g.history) - 1 for g in self.buffer))
         if move_sum == 0.0:
             return []
         games = np.random.choice(
             self.buffer,
             size=self.batch_size,
-            p=[(len(g.history) - 1)/ move_sum for g in self.buffer])
-        game_pos = [(g, np.random.randint(len(g.history)-1)) for g in games]
-        return [(g.make_image(i+1), g.make_target(i)) for (g, i) in game_pos]
+            p=[(len(g.history) - 1) / move_sum for g in self.buffer])
+        game_pos = [(g, np.random.randint(len(g.history) - 1)) for g in games]
+        return [(g.make_image(i + 1), g.make_target(i)) for (g, i) in game_pos]
 
 
 class Network(object):
@@ -945,16 +947,17 @@ def train_network(replay_buffer: ReplayBuffer):
             globalNeuralNet.train(batch)
             globalNeuralNet.save_network()
 
+
 def old_train_network(replay_buffer: ReplayBuffer):
-  # network = Network()
-  optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
-                                         config.momentum)
-  for i in range(config.training_steps):
-    if i % config.checkpoint_interval == 0:
-        globalNeuralNet.save_network(i)
-    batch = replay_buffer.sample_batch()
-    update_weights(optimizer, globalNeuralNet, batch, config.weight_decay)
-    globalNeuralNet.save_network()
+    # network = Network()
+    optimizer = tf.train.MomentumOptimizer(config.learning_rate_schedule,
+                                           config.momentum)
+    for i in range(config.training_steps):
+        if i % config.checkpoint_interval == 0:
+            globalNeuralNet.save_network(i)
+        batch = replay_buffer.sample_batch()
+        update_weights(optimizer, globalNeuralNet, batch, config.weight_decay)
+        globalNeuralNet.save_network()
 
 
 def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
@@ -964,10 +967,10 @@ def update_weights(optimizer: tf.train.Optimizer, network: Network, batch,
     for image, (target_value, target_policy) in batch:
         print(f"loop {loop}")
         loop += 1
-        policy_logits, value  = network.inference(image)
+        policy_logits, value = network.inference(image)
         loss_v = tf.losses.mean_squared_error(value, target_value)
         loss_p = tf.nn.softmax_cross_entropy_with_logits(
-                    logits=policy_logits, labels=target_policy)
+            logits=policy_logits, labels=target_policy)
         loss += (loss_v + loss_p)
 
     for weights in network.get_weights():
@@ -1012,6 +1015,7 @@ def alphazero():
         launch_job(run_selfplay, replay_buffer)
 
     train_network(replay_buffer)
+
 
 if __name__ == "__main__":
     # moaraGame = Moara()

@@ -1,3 +1,6 @@
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import deepmind
 
 config: deepmind.AlphaZeroConfig = deepmind.AlphaZeroConfig()
