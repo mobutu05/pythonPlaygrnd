@@ -9,7 +9,7 @@ import numpy as np
 from keras import Input, Model
 from keras.layers import BatchNormalization, Reshape, Activation, Conv2D, Flatten, Dropout, Dense
 from keras.optimizers import Adam
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import moara
 import copy
